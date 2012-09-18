@@ -1,0 +1,128 @@
+### This file has been modified manually but was
+### initially generated bi Winemaker 0.8.3.
+###
+### See http://www.winehq.org/docs/winelib-guide/winelib-toolkit
+### for an explanation of the parts of the makefile
+###
+### Invocation command line was
+### /usr/bin/winemaker --nomfc -lzmq .
+
+## TODO: enhance make file to include profiling target to analyse for
+## memory leaks and the like.
+##
+## quick start: http://valgrind.org/docs/manual/QuickStart.html
+## manual: http://valgrind.org/docs/manual/manual.html
+
+## TODO: add target to display TODOs in project...
+
+SRCDIR                = src/main/c
+TARGETDIR             = target
+GENDIR                = src/gen/c
+SUBDIRS               =
+DLLS                  =
+LIBS                  =
+EXES                  = zmq-server.exe
+
+### Common settings
+
+CEXTRA                = #-mno-cygwin
+CXXEXTRA              = #-mno-cygwin
+RCEXTRA               =
+DEFINES               =
+INCLUDE_PATH          = -I$(TARGETDIR) \
+			-I$(GENDIR)
+DLL_PATH              =
+DLL_IMPORTS           =
+LIBRARY_PATH          =
+LIBRARIES             = -lzmq \
+			-lprotobuf \
+
+### c.exe sources and settings
+
+c_exe_MODULE          = zmq-server.exe
+c_exe_C_SRCS          =
+c_exe_CXX_SRCS        = $(SRCDIR)/zmq_server.cpp
+c_exe_RC_SRCS         =
+c_exe_LDFLAGS         = -mwindows
+#-mno-cygwin
+c_exe_ARFLAGS         =
+c_exe_DLL_PATH        =
+c_exe_DLLS            = odbc32 \
+			ole32 \
+			oleaut32 \
+			winspool \
+			odbccp32
+c_exe_LIBRARY_PATH    =
+c_exe_LIBRARIES       = uuid
+
+c_exe_OBJS            = $(c_exe_C_SRCS:.c=.o) \
+			$(c_exe_CXX_SRCS:.cpp=.o) \
+			$(c_exe_RC_SRCS:.rc=.res)
+
+
+
+### Global source lists
+
+C_SRCS                = $(c_exe_C_SRCS)
+CXX_SRCS              = $(c_exe_CXX_SRCS)
+RC_SRCS               = $(c_exe_RC_SRCS)
+
+
+### Tools
+
+CC = winegcc
+CXX = wineg++
+RC = wrc
+AR = ar
+
+
+### Generic targets
+
+all: $(SUBDIRS) $(DLLS:%=%.so) $(LIBS) $(EXES)
+
+### Build rules
+
+.PHONY: all clean dummy
+
+$(SUBDIRS): dummy
+	@cd $@ && $(MAKE)
+
+# Implicit rules
+
+.SUFFIXES: .cc .cxx .rc .res
+DEFINCL = $(INCLUDE_PATH) $(DEFINES) $(OPTIONS)
+
+.c.o:
+	$(CC) -c $(CFLAGS) $(CEXTRA) $(DEFINCL) -o $@ $<
+
+.cc.o:
+	$(CXX) -c $(CXXFLAGS) $(CXXEXTRA) $(DEFINCL) -o $@ $<
+
+.cxx.o:
+	$(CXX) -c $(CXXFLAGS) $(CXXEXTRA) $(DEFINCL) -o $@ $<
+
+.rc.res:
+	$(RC) $(RCFLAGS) $(RCEXTRA) $(DEFINCL) -fo$@ $<
+
+# Rules for cleaning
+
+CLEAN_FILES     = y.tab.c y.tab.h lex.yy.c core *.orig *.rej \
+                  \\\#*\\\# *~ *% .\\\#*
+
+clean:: $(SUBDIRS:%=%/__clean__) $(EXTRASUBDIRS:%=%/__clean__)
+	$(RM) $(CLEAN_FILES) $(RC_SRCS:.rc=.res) $(C_SRCS:.c=.o) $(CXX_SRCS:.cpp=.o)
+	$(RM) $(DLLS:%=%.so) $(LIBS) $(EXES) $(EXES:%=%.so)
+
+$(SUBDIRS:%=%/__clean__): dummy
+	cd `dirname $@` && $(MAKE) clean
+
+$(EXTRASUBDIRS:%=%/__clean__): dummy
+	-cd `dirname $@` && $(RM) $(CLEAN_FILES)
+
+### Target specific build rules
+DEFLIB = $(LIBRARY_PATH) $(LIBRARIES) $(DLL_PATH) $(DLL_IMPORTS:%=-l%)
+
+$(c_exe_MODULE): $(c_exe_OBJS)
+	$(CXX) $(c_exe_LDFLAGS) -o $(TARGETDIR)/$@ $(c_exe_OBJS) $(c_exe_LIBRARY_PATH) $(DEFLIB) $(c_exe_DLLS:%=-l%) $(c_exe_LIBRARIES:%=-l%)
+
+

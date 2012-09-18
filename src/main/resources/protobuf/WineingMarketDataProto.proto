@@ -1,0 +1,18 @@
+package WineingMarketDataProto;
+
+option java_package = "org.instilled.wineing.gen";
+option java_outer_classname = "WineingMarketDataProto";
+
+message MarketData {
+
+  enum Type {
+     STATUS     = 0;
+     QUOTE_EX   = 1;
+     QUOTE_MM   = 3;
+     TRAGE      = 4;
+     CATEGORY   = 5;
+     SYMBOL     = 6;
+  }
+
+  required Type type = 1;
+}

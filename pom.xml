@@ -1,0 +1,187 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<groupId>org.instilled.wineing</groupId>
+	<artifactId>Wineing</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+
+	<name>Wineing</name>
+	<description>Wineing</description>
+
+	<properties>
+		<protoc-files.1>src/main/resources/protobuf/WineingCtrlProto.proto</protoc-files.1>
+		<protoc-files.2>src/main/resources/protobuf/WineingMarketDataProto.proto</protoc-files.2>
+
+		<zmq-version>2.2.0</zmq-version>
+		<protoc-version>2.4.1</protoc-version>
+		<slf4j-version>1.6.4</slf4j-version>
+		<logback-version>1.0.2</logback-version>
+		<junit-version>4.10</junit-version>
+
+		<source-version>1.6</source-version>
+		<target-version>1.6</target-version>
+	</properties>
+
+	<dependencies>
+		<dependency>
+			<groupId>com.google.protobuf</groupId>
+			<artifactId>protobuf-java</artifactId>
+			<version>${protoc-version}</version>
+		</dependency>
+		<dependency>
+			<groupId>com.jzmq</groupId>
+			<artifactId>jzmq</artifactId>
+			<version>${zmq-version}</version>
+		</dependency>
+		<dependency>
+			<groupId>commons-cli</groupId>
+			<artifactId>commons-cli</artifactId>
+			<version>1.1</version>
+		</dependency>
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>slf4j-api</artifactId>
+			<version>${slf4j-version}</version>
+		</dependency>
+		<dependency>
+			<groupId>ch.qos.logback</groupId>
+			<artifactId>logback-classic</artifactId>
+			<version>${logback-version}</version>
+		</dependency>
+		<dependency>
+			<groupId>junit</groupId>
+			<artifactId>junit</artifactId>
+			<version>${junit-version}</version>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+			<!-- Make sure that the native libs can be found while testing. -->
+			<!-- <plugin> <groupId>org.apache.maven.plugins</groupId> <artifactId>maven-surefire-plugin</artifactId> 
+				<version>2.12.3</version> <configuration> <systemProperties> <property> <name>java.library.path</name> 
+				<value>target/lib/zmq-native</value> </property> </systemProperties> </configuration> 
+				</plugin> -->
+
+			<!-- http://maven.apache.org/shared/maven-archiver/examples/classpath.html -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-jar-plugin</artifactId>
+				<version>2.4</version>
+				<configuration>
+					<archive>
+						<manifest>
+							<addClasspath>true</addClasspath>
+							<mainClass>org.instilled.wineing.WineingExampleClient</mainClass>
+							<classpathPrefix>lib/</classpathPrefix>
+						</manifest>
+					</archive>
+				</configuration>
+			</plugin>
+
+			<!-- Tell the compiler plugin what source and target version we would 
+				like -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<version>2.5.1</version>
+				<configuration>
+					<source>${source-version}</source>
+					<target>${target-version}</target>
+				</configuration>
+			</plugin>
+
+			<!-- This will unpack the zmq-native-{version}-{arch} (matched by the 
+				profile activation enforce plugin) to 'target/lib' - we require the native 
+				shared libraries to exist in a folder 'zmq-native' within the jar file. -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-dependency-plugin</artifactId>
+				<version>2.5.1</version>
+				<executions>
+					<!-- <execution> <id>unpack</id> <phase>compile</phase> <goals> <goal>unpack</goal> 
+						</goals> <configuration> <artifactItems> <artifactItem> <groupId>com.zmq</groupId> 
+						<artifactId>zmq-native</artifactId> <version>${zmq-version}</version> <classifier>${build-type}</classifier> 
+						<type>jar</type> <overWrite>true</overWrite> <outputDirectory>${project.build.directory}/lib 
+						</outputDirectory> </artifactItem> </artifactItems> </configuration> </execution> -->
+					<execution>
+						<id>copy-dependencies</id>
+						<phase>compile</phase>
+						<goals>
+							<goal>copy-dependencies</goal>
+						</goals>
+						<configuration>
+							<outputDirectory>${project.build.directory}/lib</outputDirectory>
+							<overWriteReleases>false</overWriteReleases>
+							<overWriteSnapshots>true</overWriteSnapshots>
+							<overWriteIfNewer>true</overWriteIfNewer>
+							<!-- <excludeArtifactIds>zmq-native</excludeArtifactIds> -->
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>build-helper-maven-plugin</artifactId>
+				<version>1.1</version>
+				<executions>
+					<execution>
+						<id>add-source</id>
+						<phase>generate-sources</phase>
+						<goals>
+							<goal>add-source</goal>
+						</goals>
+						<configuration>
+							<sources>
+								<source>src/gen/java</source>
+							</sources>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+
+			<!-- We use antrun instead of protobuf maven plugin because a) invoking 
+				protoc is easy and b) we use antrun plugin to call make for wineing binary. -->
+			<plugin>
+				<artifactId>maven-antrun-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>generate-sources</id>
+						<phase>generate-sources</phase>
+						<configuration>
+							<tasks>
+								<mkdir dir="target/generated-sources" />
+								<exec executable="protoc">
+									<arg value="--java_out=src/gen/java" />
+									<arg value="${protoc-files.1}" />
+									<arg value="${protoc-files.2}" />
+								</exec>
+							</tasks>
+							<sourceRoot>target/generated-sources</sourceRoot>
+						</configuration>
+						<goals>
+							<goal>run</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+
+		</plugins>
+	</build>
+
+	<!-- Build Type -->
+	<!-- For details on how the activatoin/os properties will be resolved check 
+		http://maven.apache.org/plugins/maven-enforcer-plugin/rules/requireOS.html -->
+	<!-- <profiles> <profile> <id>linux-x86_64</id> <activation> <os> <name>Windows 
+		XP</name> <family>linux</family> <arch>amd64</arch> <version>5.1.2600</version> 
+		</os> </activation> <properties> <build-type>linux-x86_64</build-type> </properties> 
+		</profile> <profile> <id>win-x86_64</id> <activation> <os> <name>Windows 
+		XP</name> <family>windows</family> <arch>x86_64</arch> <version>5.1.2600</version> 
+		</os> </activation> <properties> <build-type>win-x86_64</build-type> </properties> 
+		</profile> <profile> <id>mac-x86_64</id> <activation> <os> <name>Windows 
+		XP</name> <family>mac</family> <arch>x86_64</arch> <version>5.1.2600</version> 
+		</os> </activation> <properties> <build-type>mac-x86_64</build-type> </properties> 
+		</profile> </profiles> -->
+</project>

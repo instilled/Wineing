@@ -1,0 +1,15 @@
+* How to invoke protobuf (to generate Java classes)
+Note: this was tested only in Arch Linux (as I can't be bothered to compile
+protobuf for my Mac).
+
+protobuf version 2.4.1 is expected! It is available through 'yourt'.
+Just type
+$ yourt -S protobuf
+
+Invoke 'protoc' to compile 'NxCoreConfigEventProtos.porto'. It's a one liner for now
+as I'm going to put it into a build script sooner or later.
+To compile the protocol to java:
+
+(export PROTO_SRC='src/main/resources/protobuf';
+ export GEN_DIR='src/gen/c';
+ protoc -I=$PROTO_SRC --cpp_out=$GEN_DIR $PROTO_SRC/NxCoreConfigProto.proto)

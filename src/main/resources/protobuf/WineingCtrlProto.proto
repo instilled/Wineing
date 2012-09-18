@@ -1,0 +1,49 @@
+//
+// Command message protocol for Wineing
+//
+// See cchan.h for additional information.
+//
+package WineingCtrlProto;
+
+option java_package = "org.instilled.wineing.gen";
+option java_outer_classname = "WineingCtrlProto";
+
+// A Request message is sent from the client to interact
+// with Wineing. For every Request the server will respond
+// with a Response message.
+message Request {
+
+  enum Type {
+     START = 0;    // Sent to start streaming market data
+     STOP = 1;     // Sent to stop streaming market data
+     SHUTDOWN = 3; // Shutdowns the application
+  }
+
+  // A unique id identifying the request.
+  // This is an application generated id.
+  required int64 requestId = 1;
+
+  required Type type = 2;
+
+  // Considered only for message Request::type == START
+  // If provided wineing will try to play pack the given
+  // type file, otherwise wineing tries to connect to the
+  // real-time feed.
+  optional string tape_file = 3;
+}
+
+// Message sent as a response to a request.
+message Response {
+
+  required int64 requestId = 1;   // The id of the request
+
+  enum ResponseCode {
+     OK = 0;   // if Request was processed
+     ERR = 1;  // if Request failed.
+  }
+
+  required ResponseCode code = 2;
+  optional string text = 3;       // only if code == ERR
+                                  // text representation of the error
+                                  // that occured
+}
