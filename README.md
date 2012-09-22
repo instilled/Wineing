@@ -7,8 +7,9 @@ compatibility layer between two processes, one running NxCore and
 another one running a linux application. It aims to be fail-proof even
 under high loads. Google Protobuf is used to generate the wiring protocol.
 
-The code is heavily documented and follows doxygen documentation
-schema, see for example *Makefile* or *src/main/c/wineing.win.cc*.
+The code is heavily documented and tries follows
+[doxygen][url_doxygen] documentation schema, see for example
+*Makefile* or *src/main/c/wineing.win.cc*.
 
 The last section describes how to run the java WineingExampleClient application.
 
@@ -20,6 +21,8 @@ Tested with:
 -   ZeroMQ 2.2.0-2 (C version)
 -   Wine 1.5.6
 -   Check (unit test library for c)
+
+[url_doxygen]: http://www.stack.nl/~dimitri/doxygen/
 
 ## Running Wineing
 

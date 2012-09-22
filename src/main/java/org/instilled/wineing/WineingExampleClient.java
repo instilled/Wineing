@@ -1,29 +1,26 @@
 package org.instilled.wineing;
 
-import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.OptionBuilder;
-import org.apache.commons.cli.OptionGroup;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PosixParser;
 import org.instilled.wineing.core.ResponseProcessor;
 import org.instilled.wineing.core.WineingRemoteAPI;
-import org.instilled.wineing.core.WineingRemoteAPI.WineingRemoteAPIImpl;
+import org.instilled.wineing.core.Worker;
 import org.instilled.wineing.core.ZMQChannel;
 import org.instilled.wineing.core.ZMQChannel.ZMQChannelType;
 import org.instilled.wineing.gen.WineingCtrlProto.Request;
+import org.instilled.wineing.gen.WineingCtrlProto.Request.Builder;
+import org.instilled.wineing.gen.WineingCtrlProto.Request.Type;
 import org.instilled.wineing.gen.WineingCtrlProto.Response;
-import org.instilled.wineing.gen.WineingMarketDataProto.MarketData;
+import org.instilled.wineing.gen.WineingCtrlProto.Response.ResponseCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,259 +30,372 @@ import com.google.protobuf.InvalidProtocolBufferException;
  * Issues:
  * <ul>
  * <li>Market data protobuf incomplete</li>
- * <li>Avoid re-allocating a new buffer every time receive is being invoked</li>
+ * <li>Avoid re-allocating a new buffer every time receive is being
+ * invoked</li>
  * </ul>
  */
-public class WineingExampleClient {
-	public static final Logger log = LoggerFactory
-			.getLogger(WineingExampleClient.class);
+public class WineingExampleClient
+{
+    public static final Logger log = LoggerFactory
+            .getLogger(WineingExampleClient.class);
 
-	private volatile boolean _running;
-	private List<Runnable> _workers = new ArrayList<Runnable>(2);
+    private WineingClientCtx _ctx;
 
-	private WineingRemoteAPI _api;
+    private WineingRemoteAPI _api;
 
-	public static void main(String[] args) {
-		log.debug("Starting " + WineingExampleClient.class.getSimpleName());
+    private List<Worker> _workers = new LinkedList<Worker>();
 
-		// Command line stuff
-		CommandLine cmd = parseCMDLine(args);
-		String cchan = cmd.getOptionValue("cchan");
-		String mchan = cmd.getOptionValue("mchan");
-		String tape = cmd.getOptionValue("tape-file");
+    public static void main(String[] args)
+    {
+        // Command line stuff
+        CommandLine cmd = parseCMDLine(args);
+        String schan = cmd.getOptionValue("schan");
+        String cchan = cmd.getOptionValue("cchan");
+        String tape = cmd.getOptionValue("tape-file");
 
-		// Initialization
-		WineingExampleClient client = new WineingExampleClient();
-		client.init(cchan, mchan);
-		client.start();
+        WineingClientCtx ctx = new WineingClientCtx();
+        ctx.schan = schan;
+        ctx.cchan = cchan;
 
-		// Using the API
-		WineingRemoteAPI api = client.api();
-		{
-			// Requests tape
-			api.start(tape, new ResponseProcessor() {
-				@Override
-				public void process(Response r) {
-				}
-			});
+        log.debug("Starting "
+                + WineingExampleClient.class.getSimpleName());
 
-			// Do some work: see WineingExampleClient#market
+        // Initialization
+        final WineingExampleClient client = new WineingExampleClient();
+        client.init(ctx);
+        client.start();
 
-			// Terminate the appliaction
-			api.shutdown(new ResponseProcessor() {
-				@Override
-				public void process(Response r) {
+        // Using the API
+        WineingRemoteAPI api = client.api();
+        {
+            api.setDefaultResponseProcessor(new ResponseProcessor()
+            {
+                @Override
+                public void process(Response r)
+                {
+                    log.info(String
+                            .format("Response for %s received [id: %i, code: %s, text: %s]", //
+                                    Request.Type.START, //
+                                    r.getRequestId(), //
+                                    r.getCode(), //
+                                    r.getText()));
+                }
+            });
 
-				}
-			});
-		}
+            // Requests tape
+            api.start(tape, new ResponseProcessor()
+            {
+                @Override
+                public void process(Response r)
+                {
+                    log.info(String
+                            .format("Response for %s received [id: %i, code: %s, text: %s]", //
+                                    Request.Type.START, //
+                                    r.getRequestId(), //
+                                    r.getCode(), //
+                                    r.getText()));
+                }
+            });
 
-		// Shutdown hook
-		Runtime.getRuntime().addShutdownHook(new Thread() {
-			@Override
-			public void run() {
-				log.debug("Shutting down "
-						+ WineingExampleClient.class.getSimpleName());
-			}
-		});
-	}
+            api.start(tape, new ResponseProcessor()
+            {
+                @Override
+                public void process(Response r)
+                {
+                    log.info(String
+                            .format("Response for %s received [id: %i, code: %s, text: %s]", //
+                                    Request.Type.SHUTDOWN, //
+                                    r.getRequestId(), //
+                                    r.getCode(), //
+                                    r.getText()));
+                }
+            });
 
-	public void init(String cchan, String mchan) {
-		log.debug("Initializing " + getClass().getSimpleName());
+            // Do some work: see WorkerMarket.java
 
-		// WineingRemopeAPI writes its actions to a queue. Requests
-		// are processed by the ctrl thread.
-		BlockingQueue<Request> ctrlQueue = new ArrayBlockingQueue<Request>(1);
-		_api = new WineingRemoteAPIImpl(ctrlQueue);
+            // Terminate the appliaction
+            api.shutdown(new ResponseProcessor()
+            {
+                @Override
+                public void process(Response r)
+                {
+                    log.info(String
+                            .format("Response for %s received [id: %i, code %s]", //
+                                    Request.Type.SHUTDOWN, //
+                                    r.getRequestId(), //
+                                    r.getCode()));
+                }
+            });
+        }
 
-		// Control thread
-		log.debug(" -> control channel");
-		ZMQChannel ctrl = new ZMQChannel(cchan, ZMQChannelType.REQ);
-		ctrl.connect();
-		_workers.add(ctrl(ctrl, ctrlQueue));
+        client.shutdown();
 
-		// Market thread
-		log.debug(" -> market data channel");
-		ZMQChannel market = new ZMQChannel(mchan, ZMQChannelType.SUB);
-		market.init();
-		market.start();
-		_workers.add(market(market));
-	}
+        // Shutdown hook
+        Runtime.getRuntime().addShutdownHook(new Thread()
+        {
+            @Override
+            public void run()
+            {
+                log.debug("Shutting down "
+                        + WineingExampleClient.class.getSimpleName());
+                client.api().shutdown(null);
+                client.shutdown();
+            }
+        });
+    }
 
-	public void start() {
-		_running = true;
-		
-		// TODO single threads better than executor pool?
-		ExecutorService executor = Executors.newFixedThreadPool(2);
-		executor.submit(_workers.get(0));
-		executor.submit(_workers.get(1));
-		log.debug("Application started successfully");
-	}
+    public void init(WineingClientCtx ctx)
+    {
+        _ctx = ctx;
+    }
 
-	public WineingRemoteAPI api() {
-		return _api;
-	}
+    private void connectToServer(WineingClientCtx ctx)
+    {
+        log.info("Synchronizing with server");
 
-	private Runnable ctrl(final ZMQChannel ctrl,
-			final BlockingQueue<Request> ctrlQueue) {
-		Runnable r = new Runnable() {
-			// private byte[] buffer = new byte[2048];
+        ZMQChannel chan = new ZMQChannel(ctx.schan, ZMQChannelType.REQ);
+        chan.bind();
 
-			@Override
-			public void run() {
+        // Send cchan (publishing control messages on this channel)
+        Builder reqBuilder = Request.newBuilder();
+        reqBuilder.setRequestId(1);
+        reqBuilder.setType(Type.INIT);
+        reqBuilder.setCchanFqcn(ctx.cchan);
+        Request req = reqBuilder.build();
+        chan.send(req.toByteArray());
 
-				while (_running) {
-					// Send
-					try {
-						Request request = ctrlQueue.take();
-						if (log.isDebugEnabled()) {
-							log.debug(String.format(
-									"Sending request [id: %s, type: %s]",
-									request.getRequestId(), request.getType()
-											.name()));
-						}
+        // Receive channel information
+        byte[] buf = chan.receive();
+        Response res;
+        try
+        {
+            res = Response.parseFrom(buf);
+        } catch (InvalidProtocolBufferException e)
+        {
+            throw new IllegalStateException(
+                    "Failed to receive INIT message from Wineing", e);
+        }
 
-						byte[] buffer = request.toByteArray();
-						ctrl.send(buffer);
+        if (!(ResponseCode.INIT.equals(res.getCode()) && //
+                res.hasCchanFqcn() && res.hasMchanFqcn()))
+        {
+            throw new IllegalStateException(
+                    "Did not receive either CCHAN-in or MCHAN fqcn");
+        }
 
-					} catch (InterruptedException e) {
-						// TODO proper error handling
-						log.error("Failed to send request.", e);
-					}
+        String cchan_out = res.getCchanFqcn();
+        String mchan = res.getMchanFqcn();
 
-					// Receive
-					try {
-						byte[] buf = ctrl.receive();
-						// if (r < 0) {
-						// log.error("Failed reading response.");
-						// continue;
-						// }
+        if (log.isDebugEnabled())
+        {
+            log.debug(String.format(
+                    "Exchanged ctrl [%s] and market [%s] endpoints", //
+                    cchan_out, //
+                    mchan));
+        }
 
-						Response response = Response.parseFrom(buf);
-						switch (response.getCode()) {
-						case OK:
-							if (log.isDebugEnabled()) {
-								log.debug(String
-										.format("Received server response [id: %d, msg: %s]",
-												response.getRequestId(),
-												response.getCode().name()));
-							}
-							break;
-						case ERR:
-							// TODO propagate state
-							throw new IllegalStateException(String.format(
-									"Failed to execute command. Error: %s.",
-									response.getText()));
+        ctx.cchan_out = cchan_out;
+        ctx.mchan = mchan;
+    }
 
-						default:
-							break;
-						}
-					} catch (InvalidProtocolBufferException e) {
-						log.error("Failed to parse Wineing response.", e);
-					}
-				}
-			}
-		};
-		return r;
-	}
+    public void start()
+    {
+        log.debug("Initializing " + getClass().getSimpleName());
 
-	private Runnable market(final ZMQChannel market) {
-		Runnable r = new Runnable() {
-			// private byte[] buffer = new byte[2048];
+        // First we need to create the 'server' channel that will
+        // listen for incoming Response messages sent by Wineing.
+        WorkerCtrlIn workerCtrlIn = new WorkerCtrlIn(_ctx.cchan);
+        _workers.add(workerCtrlIn);
+        Thread worker_ctrl_in = new Thread(workerCtrlIn);
+        worker_ctrl_in.start();
 
-			@Override
-			public void run() {
-				long count = 0;
-				while (_running) {
-					try {
-						byte[] buf = market.receive();
-						// if (r < 0) {
-						// log.error("Failed parsing market data message");
-						// continue;
-						// }
+        // We can now connect to the server exchanging ctrl and market
+        // data channel endpoints (sets them in WineingClientCtx). Both
+        // are server channels that we will connect to later.
+        connectToServer(_ctx);
 
-						MarketData marketData = MarketData.parseFrom(buf);
+        // Give the server time to create the server sockets we connect
+        // to as we might fail to connect to the channels otherwise.
+        // TODO is there a better way to synchronize client and server?
+        try
+        {
+            Thread.sleep(500);
+        } catch (InterruptedException e)
+        {
+        }
 
-						if (count % 1000 == 0) {
-							log.debug(String
-									.format("Message received (printing every 1000) [%s]",
-											marketData.getType()));
-						}
+        // Control thread
+        WorkerCtrlOut workerCtrlOut = new WorkerCtrlOut(_ctx.cchan_out);
+        _workers.add(workerCtrlOut);
+        Thread worker_ctrl_out = new Thread(workerCtrlOut);
+        worker_ctrl_out.start();
 
-						count++;
-					} catch (InvalidProtocolBufferException e) {
-						log.error("Failed to parse MarketData message.", e);
-					}
-				}
+        // Market thread
+        WorkerMarket workerMarket = new WorkerMarket(_ctx.mchan);
+        _workers.add(workerMarket);
+        Thread worker_market = new Thread(workerMarket);
+        worker_market.start();
 
-				log.debug("Received " + count + " messages");
-			}
-		};
-		return r;
-	}
+        _api = new WineingRemoteAPIImpl(workerCtrlOut, workerCtrlIn);
+    }
 
-	private static CommandLine parseCMDLine(String[] args) {
-		CommandLine line = null;
-		Options ops = _options();
-		try {
-			CommandLineParser parser = new PosixParser();
-			line = parser.parse(ops, args);
-		} catch (ParseException exp) {
-			HelpFormatter formatter = new HelpFormatter();
-			formatter
-					.printHelp(WineingExampleClient.class.getSimpleName(), ops);
-			System.exit(1);
-		}
+    public void shutdown()
+    {
+        for (Worker worker : _workers)
+        {
+            worker.shutdown();
+        }
+        ZMQChannel.destroy();
+    }
 
-		return line;
-	}
+    public WineingRemoteAPI api()
+    {
+        return _api;
+    }
 
-	@SuppressWarnings("static-access")
-	private static Options _options() {
-		Options o = new Options();
+    private static class WineingClientCtx
+    {
+        private String schan;
+        private String cchan;
+        private String cchan_out;
+        private String mchan;
+    }
 
-		o.addOption(new Option("h", "help", false, "Prints this message"));
+    public static class WineingRemoteAPIImpl implements
+            WineingRemoteAPI
+    {
+        private WorkerCtrlOut _out;
+        private WorkerCtrlIn _in;
 
-		// cchan option
-		o.addOption(OptionBuilder
-				.hasArg()
-				.withArgName("fqcn")
-				.isRequired()
-				.withDescription(
-						"Control channel name.                                 " //
-								+ "The control channel is a synchronous ZMQ " //
-								+ "channel. The client shall connect with ZMQ's " //
-								+ "REP to this channel.").withLongOpt("cchan")
-				.create("c"));
+        public WineingRemoteAPIImpl(WorkerCtrlOut out, WorkerCtrlIn in)
+        {
+            _out = out;
+            _in = in;
+        }
 
-		// mchan option
-		o.addOption(OptionBuilder
-				.hasArg()
-				.withArgName("fqcn")
-				.isRequired()
-				.withDescription(
-						"Market data channel.                                  " //
-								+ "The client receives market data on this channel. " //
-								+ "It is a ZMQ SUB channel.")
-				.withLongOpt("mchan").create("m"));
+        @Override
+        public void setDefaultResponseProcessor(ResponseProcessor p)
+        {
+            _in.setDefaultResponseProcessor(p);
+        }
 
-		// real-time/backtest
-		OptionGroup g = new OptionGroup();
-		g.isRequired();
-		g.addOption(OptionBuilder
-				.withDescription(
-						"Real-time.                                            " //
-								+ "Uses real-time market data.")
-				.withLongOpt("real-time").create("r"));
-		g.addOption(OptionBuilder
-				.hasArg()
-				.withArgName("tape")
-				.withDescription(
-						"Backtesting mode.                                     " //
-								+ "Requests TAPE from Wineing.")
-				.withLongOpt("tape-file").create("t"));
-		o.addOptionGroup(g);
+        @Override
+        public void start(ResponseProcessor p)
+        {
+            start(null, p);
+        }
 
-		return o;
-	}
+        @Override
+        public void start(String tapeFile, ResponseProcessor p)
+        {
+            Request r = build(Type.START, tapeFile);
+            put(r, p);
+        }
+
+        @Override
+        public void stop(ResponseProcessor p)
+        {
+            Request r = build(Type.STOP);
+            put(r, p);
+        }
+
+        @Override
+        public void shutdown(ResponseProcessor p)
+        {
+            Request r = build(Type.SHUTDOWN);
+            put(r, p);
+        }
+
+        private void put(Request r, ResponseProcessor p)
+        {
+            if (p != null)
+            {
+                _in.setResponseProcessor(r.getRequestId(), p);
+            }
+            _out.addRequest(r);
+        }
+
+        private static Request build(Type type)
+        {
+            return build(type, null);
+        }
+
+        private static Request build(Type type, String tape)
+        {
+            Builder builder = Request.newBuilder();
+            builder.setRequestId(getRequestId());
+            builder.setType(type);
+            if (tape != null)
+            {
+                builder.setTapeFile(tape);
+            }
+            Request r = builder.build();
+            return r;
+        }
+
+        private static long getRequestId()
+        {
+            return System.currentTimeMillis();
+        }
+    }
+
+    private static CommandLine parseCMDLine(String[] args)
+    {
+        CommandLine line = null;
+        Options ops = _options();
+        try
+        {
+            CommandLineParser parser = new PosixParser();
+            line = parser.parse(ops, args);
+        } catch (ParseException exp)
+        {
+            HelpFormatter formatter = new HelpFormatter();
+            formatter.printHelp(
+                    WineingExampleClient.class.getSimpleName(), ops);
+            System.exit(1);
+        }
+
+        return line;
+    }
+
+    @SuppressWarnings("static-access")
+    private static Options _options()
+    {
+        Options o = new Options();
+
+        o.addOption(new Option("h", "help", false,
+                "Prints this message"));
+
+        // schan option
+        o.addOption(OptionBuilder
+                .hasArg()
+                .withArgName("fqcn")
+                .isRequired()
+                .withDescription(
+                        "Synchronization socket.                               " //
+                                + "ZMQ REQ/REP socket")
+                .withLongOpt("schan").create("s"));
+
+        // cchan option
+        o.addOption(OptionBuilder
+                .hasArg()
+                .withArgName("fqcn")
+                .isRequired()
+                .withDescription(
+                        "Control channel name.                                 " //
+                                + "The control channel is a synchronous ZMQ " //
+                                + "channel. The client shall connect with ZMQ's " //
+                                + "REP to this channel.")
+                .withLongOpt("cchan").create("c"));
+
+        o.addOption(OptionBuilder
+                .hasArg()
+                .withArgName("tape")
+                .withDescription(
+                        "Backtesting mode.                                     " //
+                                + "Requests TAPE from Wineing.")
+                .withLongOpt("tape-file").create("t"));
+
+        return o;
+    }
 }

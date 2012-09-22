@@ -127,9 +127,10 @@ EXES                  = $(exe_WI_NAME)
 # wineing.exe
 exe_WI_NAME            = $(BINDIR)/wineing.exe
 exe_WI_CC_SRCS         =
-exe_WI_CXX_SRCS        = $(SRCDIR)/core/inxcore.win.cc \
-                         $(SRCDIR)/core/wchan.cc \
-                         $(SRCDIR)/wineing.win.cc
+exe_WI_CXX_SRCS        = $(SRCDIR)/core/inxcore.cc \
+                         $(SRCDIR)/core/chan.cc \
+                         $(SRCDIR)/wineing.cc \
+                         $(SRCDIR)/main.cc
 exe_WI_LDFLAGS         = -mwindows
 exe_WI_LIBRARY_PATH    =
 exe_WI_LIBRARIES       = -luuid \
@@ -168,10 +169,10 @@ DLL_IMPORTS           = # -lole32
 
 DEFINES               =
 OPTIONS               = -O3 -DLOG_LEVEL=$(LOG_LEVEL) # excluded from DEBUG target
-INCLUDE_PATH          = -I$(GENDIR) -I$(SRCDIR) -I$(RESDIR)/NxCoreAPI 
+INCLUDE_PATH          = -I$(GENDIR) -I$(SRCDIR) -I$(RESDIR)/NxCoreAPI -I-/usr/include
 
 CFLAGS                = -Wall
-CXXFLAGS              = -Wall -std=c++11
+CXXFLAGS              = -Wall 
 LFLAGS                = -Wall
 
 # See http://www.delorie.com/howto/cygwin/mno-cygwin-howto.html
@@ -250,26 +251,22 @@ dirs:
 	mkdir -p $(BINDIR)
 	mkdir -p $(GENDIR)
 
-#%cchan.cc.o: %cchan.cc
-#	$(CXX) $(CXXFLAGS) $(CXXEXTRA) $(ALL_INCL) -fPIC -o $@ -c $<
-
 # Default c/cc targets
 %.c.o: %.c
-	$(CC) $(CFLAGS) $(CEXTRA) $(ALL_INCL) -o $@ -c $<
+	$(WCC) $(CFLAGS) $(CEXTRA) $(ALL_INCL) -o $@ -c $<
 
 %.cc.o: %.cc
-	$(CXX) $(CXXFLAGS) $(CXXEXTRA) $(ALL_INCL) -fPIC -o $@ -c $<
+	$(WCXX) $(CXXFLAGS) $(CXXEXTRA) $(ALL_INCL) -fPIC -o $@ -c $<
 
 # We introduce windows specific targets (by convention files ending in
 # .win.(c|cc) will be compiled with winegcc or wineg++ respectively.
 # Following this convention circumvents writing specific targets for
 # each file that needs to be compiled withe either winegcc or wineg++.
-%.win.c.o: %.win.c
-	$(WCC) $(CFLAGS) $(CEXTRA) $(ALL_INCL) -o $@ -c $<
+#%.c.o: %.win.c
+#	$(WCC) $(CFLAGS) $(CEXTRA) $(ALL_INCL) -o $@ -c $<
 
-%.win.cc.o: %.win.cc
-	$(WCXX) $(CXXFLAGS) $(CXXEXTRA) $(ALL_INCL) -o $@ -c $<
-
+#%.cc.o: %.win.cc
+#	$(WCXX) $(CXXFLAGS) $(CXXEXTRA) $(ALL_INCL) -o $@ -c $<
 
 # It is not possible to use wildcards (automatic variables in make
 # jargon) but in the recipe. They're illegal in the target and

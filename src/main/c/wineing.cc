@@ -33,7 +33,8 @@
  * - switch to asynchronous control channel
  * - profiling
  *   > gprof: http://www.cs.utah.edu/dept/old/texinfo/as/gprof.html
- *   > http://stackoverflow.com/questions/375913/what-can-i-use-to-profile-c-code-in-linux
+ *   > http://stackoverflow.com/questions/375913/w
+ hat-can-i-use-to-profile-c-code-in-linux
  * - Traffic/Resource monitoring
  *   > list of good tools
  *     http://www.cyberciti.biz/tips/top-linux-monitoring-tools.html
@@ -52,9 +53,18 @@
   alignment, mutex (too slow for certain), use counter and check (poll
   state) periodically.
 
-  I have yet to see if using these extensions/functions we achieve
-  faster results that using cache 
- */
+  I have yet to see if whether we achieve better performance using
+  these extensions/functions or by cache line alignment.
+
+  // This aligns code on 64 byte boundaries. The struct will thus
+  // be padded with 56 bytes.
+  typedef struct
+  {
+    int a __attribute__((aligned(64)));
+    int b;
+  } my_type;
+
+*/
 
 /*
   Notes on debugging.
@@ -75,26 +85,28 @@
   winelib
   http://wine.1045685.n5.nabble.com/building-a-winelib-dll-td3271834.html
 */
-
 #include <windows.h>
 
 #include <unistd.h>
 #include <pthread.h>
 #include <sstream>
-#include <atomic>
 
-#include "wineing.win.h"
+#include "wineing.h"
+#include "core/chan.h"
 
 // Google protobuf generated headers
 #include "WineingCtrlProto.pb.h"
 #include "WineingMarketDataProto.pb.h"
 
-// Unsynchronized, potential threading issues with
+#include <google/protobuf/io/zero_copy_stream_impl.h>
+#include <google/protobuf/io/zero_copy_stream_impl_lite.h>
+
+// TODO: Unsynchronized, potential threading issues with
 // WineingMsg and WineingCtx
 
 // Wineing uses these to communicate between threads.
-static pthread_mutex_t sync_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t  cond_var   = PTHREAD_COND_INITIALIZER;
+static pthread_mutex_t sync_mutex;
+static pthread_cond_t  cond_var;
 static WineingMsg msg;
 
 // The application context. Its access is unsyncronized. The variable
@@ -109,48 +121,18 @@ static WineingMsg msg;
 // if windows has size_t or something else.
 // IMTPORTANT: ctx is not thread safe! especially wchan (wchan.sock)
 // structs can (should) not be shared between threads!
-static WineingCtx ctx;
-
-int main(int argc, char** argv)
-{
-  // Interrupt ctrl-c and kill and do proper shutdown
-  // http://www.cs.cf.ac.uk/Dave/C/node24.html
-  //signal(SIGINT, sigproc);
-  //signal(SIGQUIT, sigproc);
-
-  WineingConf conf;
-
-  conf.cchan_fqcn   = DEFAULTS_CCHAN_NAME;
-  conf.mchan_fqcn   = DEFAULTS_MCHAN_NAME;
-  conf.schan_fqcn   = DEFAULTS_SCHAN_NAME;
-  conf.tape_basedir = DEFAULTS_TAPE_BASE_DIR;
-
-  cmd_parse(argc, argv, conf);
-
-  log(LOG_INFO, "Starting Wineing...");
-
-  // Be nice and let Linux users know that we are running winelib!
-  // HAHAHAHA!
-  //MessageBox(NULL, "I'm Wineing!", "", MB_OK);
-
-  ctx.conf = &conf;
-
-  wineing_init(ctx);
-  int rc = wineing_run(ctx);
-  wineing_shutdown(ctx);
-
-  return rc;
-}
+//WineingCtx *ctx;
 
 /**
  * Initiales Wineing. Includes (in that order)
  * - verifying Google Protocol generated header versions
  * - loading nxcore dll
- * - initializing ZMQ channels (cchan, wchan)
+ * - initializing ZMQ channels (cchan, chan)
  *
  */
 void wineing_init(WineingCtx &ctx)
 {
+  log(LOG_INFO, "Initializing wineing");
   // Verify the version of the library we linked against is compatible
   // with the version of the headers generated.
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -158,30 +140,26 @@ void wineing_init(WineingCtx &ctx)
   // Load dll.
   ctx.nxCoreLib = inxcore_load();
   if(!ctx.nxCoreLib) {
-    log(LOG_ERROR, "Failed loading NxCore dll.");
+    log(LOG_ERROR, "Failed loading NxCore dll");
     exit(1);
   }
 
-  // Initialize the control channel. Only if the client requests
-  // market data (by sending START over control channel) we will
-  // create the market data channel.
-  ctx.cchan = wchan_init(ctx.conf->cchan_fqcn, WCHAN_TYPE_CTRL);
-  ctx.mchan = wchan_init(ctx.conf->mchan_fqcn, WCHAN_TYPE_MARKET);
-
-  // Bind the channel to its endpoint.
-  wchan_start(ctx.cchan);
-  wchan_start(ctx.mchan);
+  pthread_mutex_init(&sync_mutex, NULL);
+  pthread_cond_init(&cond_var, NULL);
 }
 
 /**
  *
  */
-int wineing_run(WineingCtx &ctx)
+void wineing_run(WineingCtx &ctx)
 {
   // Good tutorial on posix threads
   // http://www.yolinux.com/TUTORIALS/LinuxTutorialPosixThreads.html
   pthread_t ctrl_t;
   pthread_t market_t;
+
+  // Wait for client to connect
+  wineing_wait_for_client(ctx);
 
   // The control thread listens for incomming messages on cchan
   // managing the mchan (market data channel) as requested by the
@@ -192,8 +170,6 @@ int wineing_run(WineingCtx &ctx)
   // Wait for threads to finish
   pthread_join(ctrl_t, NULL);
   pthread_join(market_t, NULL);
-
-  return 0;
 }
 
 /**
@@ -203,13 +179,96 @@ void wineing_shutdown(WineingCtx &ctx)
 {
   log(LOG_INFO, "Shutting down...");
 
+  chan_shutdown();
+
+  pthread_cond_destroy(&cond_var);
+  pthread_mutex_destroy(&sync_mutex);
+
   inxcore_free(ctx.nxCoreLib);
 
-  wchan_free(ctx.mchan);
-  wchan_free(ctx.cchan);
-
-  // This frees any protobuf specific stuff.
+  // Free any protobuf specific resources
   google::protobuf::ShutdownProtobufLibrary();
+}
+
+
+static int _recv_ctrl(int size, void *data, void *obj)
+{
+  WineingCtrlProto::Request *r =
+    (WineingCtrlProto::Request*) obj;
+
+  google::protobuf::io::ArrayInputStream is (data, size);
+
+  bool p = r->ParseFromZeroCopyStream(&is);
+
+  if(!p) {
+    log(LOG_ERROR, "Failed parsing message");
+    return -2;
+  }
+
+  return 0;
+}
+
+static void _send_free(void *buffer, void *hint)
+{
+  delete (char*)buffer;
+}
+
+int wineing_wait_for_client(WineingCtx &ctx)
+{
+  using namespace WineingCtrlProto;
+
+  char *buffer = new char[2048];
+
+  chan *sync = chan_init(ctx.conf->schan_fqcn, CHAN_TYPE_REP);
+  chan_bind(sync);
+
+  // Wait for client
+  Request req;
+  Response res;
+
+  int rc = chan_recv(sync, _recv_ctrl, &req);
+
+  if(rc == 0) {
+    res.set_requestid(req.requestid());
+
+    if(req.type() != Request::INIT &&
+       !(req.has_cchan_fqcn())) {
+      std::stringstream err;
+      err << "Wrong Request type (INIT expected) or "
+          << "missing control channel fqcn.";
+      res.set_code(Response::ERR);
+      res.set_text(err.str());
+      rc = -1;
+
+    } else {
+      // Get the control channel endpoint names
+      char *cchan_out = new char[req.cchan_fqcn().length()+1];
+      strcpy(cchan_out, req.cchan_fqcn().c_str());
+      ctx.cchan_fqcn_out = cchan_out;
+
+      res.set_code(Response::INIT);
+      res.set_cchan_fqcn(ctx.conf->cchan_fqcn);
+      res.set_mchan_fqcn(ctx.conf->mchan_fqcn);
+      rc = 0;
+
+      log(LOG_DEBUG,
+          "Exchanged ctrl [%s] endpoint",
+          ctx.cchan_fqcn_out);
+    }
+
+
+    google::protobuf::io::ArrayOutputStream os (buffer, 2048);
+    res.SerializeToZeroCopyStream(&os);
+    chan_send(sync, buffer, res.ByteSize(), _send_free);
+
+  } else {
+    log(LOG_ERROR, "Failed parsing Request");
+  }
+
+  // Sync channel you're done!
+  chan_destroy(sync);
+
+  return rc;
 }
 
 /**
@@ -223,44 +282,44 @@ int __stdcall processTape(const NxCoreSystem *pNxCoreSys, \
 
   // Use static vars to avoid reinitialization. This is potentially
   // risky if the UserData (mchan) changes. We know that Winieng never
-  // reallocates a new wchan structure during its lifetime.
+  // reallocates a new chan structure during its lifetime.
   static MarketData m;
 
   // Because we reuse protobuf objects we have to clear them.
   m.Clear();
-
+  /*
   switch( pNxCoreMsg->MessageType )
     {
     case NxMSG_STATUS:
       m.set_type(MarketData::STATUS);
-      wchan_send_market(ctx.mchan, m);
+      chan_send_market(ctx.mchan, m);
       break;
 
     case NxMSG_EXGQUOTE:
       m.set_type(MarketData::QUOTE_EX);
-      wchan_send_market(ctx.mchan, m);
+      chan_send_market(ctx.mchan, m);
       break;
 
     case NxMSG_MMQUOTE:
       m.set_type(MarketData::QUOTE_EX);
-      wchan_send_market(ctx.mchan, m);
+      chan_send_market(ctx.mchan, m);
       break;
 
     case NxMSG_TRADE:
       m.set_type(MarketData::QUOTE_EX);
-      wchan_send_market(ctx.mchan, m);
+      chan_send_market(ctx.mchan, m);
       break;
 
     case NxMSG_CATEGORY:
       m.set_type(MarketData::QUOTE_EX);
-      wchan_send_market(ctx.mchan, m);
+      chan_send_market(ctx.mchan, m);
       break;
       //case NxMSG_SYMBOLCHANGE:
       //break;
       //case NxMSG_SYMBOLSPIN:
       //break;
     }
-
+*/
 
   // An unsynchronized read on a shared variable. We don't care about
   // the value being delayed. The cost of synchronization is too high.
@@ -272,10 +331,20 @@ int __stdcall processTape(const NxCoreSystem *pNxCoreSys, \
 /**
  * The thread processing NxCore messages.
  */
-void* market_thread(void *ctx)
+void* market_thread(void *_ctx)
 {
-  WineingCtx *_ctx = (WineingCtx *)ctx;
+  WineingCtx *ctx = (WineingCtx *)_ctx;
 
+  // TODO: Access to ctx->cchan_fqcn_out is not thread-safe. Do we
+  // need to access the variable through a memory barrier e.g. gcc's
+  // __sync_* extensions? I guess it's safe because we created the
+  // thread ways after we set the variable.
+  chan *cchan_out = chan_init(ctx->cchan_fqcn_out, CHAN_TYPE_PUSH_CONNECT);
+  chan *mchan  = chan_init(ctx->conf->cchan_fqcn, CHAN_TYPE_PUB);
+
+  chan_bind(cchan_out);
+  chan_bind(mchan);
+  /*
   while(1) {
     pthread_mutex_lock( &sync_mutex );
     pthread_cond_wait( &cond_var, &sync_mutex );
@@ -298,6 +367,9 @@ void* market_thread(void *ctx)
       break;
     }
   }
+*/
+  chan_destroy(mchan);
+  chan_destroy(cchan_out);
 
   return NULL;
 }
@@ -310,7 +382,21 @@ void* ctrl_thread(void *_ctx)
 {
   WineingCtx *ctx = (WineingCtx *)_ctx;
 
-  WineingCtrlProto::Request req;
+  // TODO: Access to ctx->cchan_fqcn_out is not thread-safe. Do we
+  // need to access the variable through a memory barrier e.g. gcc's
+  // __sync_* extensions? I guess it's safe because we created the
+  // thread ways after we set the variable.
+   chan *cchan_out = chan_init(ctx->cchan_fqcn_out, CHAN_TYPE_PUSH_CONNECT);
+  chan *cchan_in  = chan_init(ctx->conf->cchan_fqcn, CHAN_TYPE_PULL_BIND);
+
+  chan_bind(cchan_out);
+  chan_bind(cchan_in);
+
+  while(1) {
+
+
+  }
+  /*  WineingCtrlProto::Request req;
   WineingCtrlProto::Response res;
   std::stringstream tape;
 
@@ -322,7 +408,7 @@ void* ctrl_thread(void *_ctx)
     res.Clear();
     tape.clear();
 
-    int rc = wchan_recv_ctrl(ctx->cchan, req);
+    int rc = chan_recv_ctrl(ctx->cchan, req);
     log(LOG_DEBUG,                                          \
         "Received control request [id: %li, type: %d]",     \
         req.requestid(),                                    \
@@ -393,10 +479,13 @@ void* ctrl_thread(void *_ctx)
           break;
         }
 
-     wchan_send_ctrl(ctx->cchan, res);
+     chan_send_ctrl(ctx->cchan, res);
 
     }
   }
+*/
+  chan_destroy(cchan_in);
+  chan_destroy(cchan_out);
 
   return NULL;
 }
@@ -405,63 +494,3 @@ void* ctrl_thread(void *_ctx)
 // {
 //   wineing_shutdown(ctx);
 // }
-
-void cmd_print_usage()
-{
-  printf("Usage: wineing.exe "
-         "--cchan=<fqcn> "
-         "--mchan=<fqcn> "
-         "[--schan=<fqcn>] "
-         "[--tape-root=<dir>]\n\n");
-
-  printf("Wineing TBD.\n\n");
-  printf("ZMQ channels:\n");
-  printf("  --cchan          Control channel (synchronous ZMQ REQ/REP socket)\n");
-  printf("  --mchan          Market data channel (asynchronous ZMQ PUB/SUB\n");
-  printf("                   socket)\n");
-  printf("  [--schan]        Optional. Sync channel (synchronous ZMQ REQ/REP "
-                                                                    "socket)\n");
-  printf("                   Defaults to 'tcp://localhost:9991'\n\n");
-  printf("NxCore related options:\n");
-  printf("  [--tape-root]    The directory from which to serve the tape files\n");
-  printf("                   Defaults to 'C:\\md\\'. The path has to end "
-                             "in '\\'\n");
-}
-
-char * cmd_parse_opt(char *argv)
-{
-  int eq = strcspn (argv, "=");
-  return &argv[eq+1];
-}
-
-void cmd_parse(int argc, char** argv, WineingConf &conf)
-{
-  int allOpts = 0;
-  for(int i = 1; i < argc; i++) {
-    switch(argv[i][2])
-      {
-      case 'c':
-        conf.cchan_fqcn = cmd_parse_opt(argv[i]);
-        allOpts |= 0x1;
-        break;
-
-      case 'm':
-        conf.mchan_fqcn = cmd_parse_opt(argv[i]);
-        allOpts |= 0x2;
-        break;
-
-      case 't':
-        conf.tape_basedir = cmd_parse_opt(argv[i]);
-        break;
-
-      case 's':
-        conf.schan_fqcn = cmd_parse_opt(argv[i]);
-        break;
-      }
-  }
-
-  if(allOpts != 3) {
-    cmd_print_usage();
-    exit(1);
-  }
-}

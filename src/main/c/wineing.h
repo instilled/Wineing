@@ -2,15 +2,13 @@
 #ifndef __WINEING_H
 #define __WINEING_H
 
-#include "core/wchan.h"
-#include "core/inxcore.win.h"
-
-
+#include "core/inxcore.h"
 #include "logging/logging.h"
 
+
 // Application defaults
-#define DEFAULTS_SCHAN_NAME           "tcp://*:9990"
-#define DEFAULTS_CCHAN_NAME           "tcp://*:9991"
+#define DEFAULTS_SCHAN_NAME           "tcp://*:9999"
+#define DEFAULTS_CCHAN_NAME           "tcp://*:9990"
 #define DEFAULTS_MCHAN_NAME           "tcp://*:9992"
 #define DEFAULTS_TAPE_BASE_DIR        "C:\\md\\"
 
@@ -38,9 +36,9 @@ typedef struct
  */
 typedef struct
 {
+  const char *schan_fqcn;
   const char *cchan_fqcn;
   const char *mchan_fqcn;
-  const char *schan_fqcn;
   const char *tape_basedir;
 } WineingConf;
 
@@ -52,40 +50,42 @@ typedef struct
 typedef struct
 {
   HINSTANCE nxCoreLib;
-  wchan *cchan;
-  wchan *mchan;
+  const char *cchan_fqcn_out;
   WineingConf *conf;
 } WineingCtx;
 
-//int __stdcall nxCoreCallback(const NxCoreSystem*, const NxCoreMessage*);
 
 /**
  *
  */
-static void wineing_init(WineingCtx &);
+void wineing_init(WineingCtx &);
 
 /**
  *
  */
-static int wineing_run(WineingCtx &);
+void wineing_run(WineingCtx &);
 
 /**
  *
  */
-static void wineing_shutdown(WineingCtx &);
+void wineing_shutdown(WineingCtx &);
 
 /**
  *
  */
-static void* ctrl_thread(void*);
+int wineing_wait_for_client(WineingCtx &);
 
 /**
  *
  */
-static void* market_thread(void*);
+void* ctrl_thread(void*);
 
-void cmd_parse(int, char**, WineingConf &);
+/**
+ *
+ */
+void* market_thread(void*);
 
-void sigproc(int);
+
+//void sigproc(int);
 
 #endif /* __WINEING_H */

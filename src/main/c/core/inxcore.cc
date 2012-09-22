@@ -1,9 +1,9 @@
 
-#include "inxcore.win.h"
+
+#include "inxcore.h"
+#include "logging/logging.h"
 
 #include <stdio.h>
-
-#include "logging/logging.h"
 
 HINSTANCE inxcore_load()
 {

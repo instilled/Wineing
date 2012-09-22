@@ -5,216 +5,275 @@ import org.zeromq.ZMQ.Context;
 import org.zeromq.ZMQ.Socket;
 
 /**
- * An abstraction to the ZMQ Java binding to hide the details of socket
- * initialization and connection.
+ * An abstraction to the ZMQ Java binding hiding details of socket
+ * creation, initialization and connection. For now {@link ZMQChannel}
+ * creates just one {@link ZMQ.Context} using one IO thread, see
+ * {@link ZMQ#context(int)}.<br>
+ * <br>
+ * <b>Note</b>: This class is not thread-safe. An application usually
+ * creates one (or more) {@link ZMQChannel}s per {@link Thread}. This is
+ * due to the nature of ZMQ sockets. Making {@link ZMQChannel}
+ * thread-safe is easy but due to performance requirements was not
+ * undertaken.
  */
-public class ZMQChannel {
-	private String _fqcn;
-	private ZMQChannelType _type;
+public class ZMQChannel
+{
+    private static Context CTX = ZMQ.context(1);
 
-	private Context _ctx;
-	private Socket _sock;
+    private String _fqcn;
+    private ZMQChannelType _type;
 
-	public ZMQChannel(String fqcn, ZMQChannelType type) {
-		_fqcn = fqcn;
-		_type = type;
-	}
+    private Socket _sock;
 
-	/**
-	 * Initializes the ZMQ context and socket but does not yet to the socket.
-	 * The channel will be ready for sending/receiving only after a call to
-	 * {@link #start()}.
-	 */
-	public void init() {
-		_ctx = ZMQ.context(1);
+    public ZMQChannel(String fqcn, ZMQChannelType type)
+    {
+        _fqcn = fqcn;
+        _type = type;
+    }
 
-		int type;
+    /**
+     * Initializes the ZMQ context and socket but does not yet to the
+     * socket.
+     */
+    private void init()
+    {
+        int type;
 
-		switch (_type) {
+        switch (_type)
+        {
+        case PUB:
+            type = ZMQ.PUB;
+            break;
+        case SUB:
+            type = ZMQ.SUB;
+            break;
 
-		case PUB:
-			type = ZMQ.PUB;
-			break;
-		case SUB:
-			type = ZMQ.SUB;
-			break;
+        case PUSH_BIND:
+        case PUSH_CONNECT:
+            type = ZMQ.PUSH;
 
-		case REP:
-			type = ZMQ.REP;
-			break;
-		case REQ:
-			type = ZMQ.REQ;
-			break;
+        case PULL_BIND:
+        case PULL_CONNECT:
+            type = ZMQ.PULL;
 
-		default:
-			throw new IllegalStateException(
-					"Could not initialize ZMQChannel. Invalid type [" + _type
-							+ "].");
-		}
-		_sock = _ctx.socket(type);
-	}
+        case REP:
+            type = ZMQ.REP;
+            break;
+        case REQ:
+            type = ZMQ.REQ;
+            break;
 
-	/**
-	 * Connects to the socket. Making the channel ready for sending/receiving
-	 * data. <br>
-	 * <br>
-	 * <b>Note:</b> If the channel type is of {@link ZMQChannelType#SUB} this
-	 * method will initially subscribe to all messages.
-	 */
-	public void start() {
-		switch (_type) {
-		case REQ:
-			_sock.connect(_fqcn);
-			break;
-		case SUB:
-			_sock.connect(_fqcn);
-			_sock.subscribe(new byte[0]);
-			break;
+        default:
+            throw new IllegalStateException(
+                    "Could not initialize ZMQChannel. Invalid type ["
+                            + _type + "].");
+        }
 
-		default:
-			throw new IllegalStateException("Case not implemented [" + _type
-					+ "]");
-		}
-	}
+        _sock = CTX.socket(type);
+    }
 
-	public String getFqcn() {
-		return _fqcn;
-	}
+    /**
+     * Connects to the socket. Making the channel ready for
+     * sending/receiving data. <br>
+     * <br>
+     * <b>Note:</b> If the channel type is of {@link ZMQChannelType#SUB}
+     * this method will initially subscribe to all messages.
+     */
+    public void bind()
+    {
+        init();
 
-	public ZMQChannelType getType() {
-		return _type;
-	}
+        switch (_type)
+        {
+        case REP:
+        case PUB:
+        case PULL_BIND:
+        case PUSH_BIND:
+            _sock.bind(_fqcn);
+            break;
 
-	public Context getContext() {
-		return _ctx;
-	}
+        case REQ:
+        case SUB:
+        case PULL_CONNECT:
+        case PUSH_CONNECT:
+            _sock.connect(_fqcn);
+            break;
 
-	public Socket getSocket() {
-		return _sock;
-	}
+        default:
+            throw new IllegalStateException("Case not implemented ["
+                    + _type + "]");
+        }
 
-	/**
-	 * Sends data to socket. ZMQ requires the last byte of the data to be '0',
-	 * that is <code>data[data.length - 1] = 0</code>. <br>
-	 * <br>
-	 * The send operation is not supported for all {@link ZMQChannelType}s.
-	 * Correct use is left to the application.
-	 * 
-	 * @param data
-	 */
-	public void send(byte[] data) {
-		_sock.send(data, 0);
-	}
+        if (ZMQChannelType.SUB.equals(_type))
+        {
+            _sock.subscribe(new byte[0]);
+        }
+    }
 
-	/**
-	 * Does exactly the same as {@link ZMQChannel#receive()} but does not block
-	 * waiting for a message to arrive.
-	 * 
-	 * @param buffer
-	 * @param offset
-	 * @param len
-	 * @return Number of bytes read into buffer.
-	 */
-	public byte[] receiveNoblock() {
-		// TODO use _sock.recv(buffer, ..., ..., ...) instead of
-		// allocating a data buffer with each call
-		return _sock.recv(ZMQ.NOBLOCK);
-	}
+    public String getFqcn()
+    {
+        return _fqcn;
+    }
 
-	/**
-	 * See {@link #receiveNoblock()}.
-	 * 
-	 * @param buffer
-	 * @param offset
-	 * @param len
-	 * @return
-	 */
-	public int receiveNoblock(byte[] buffer, int offset, int len) {
-		// TODO use _sock.recv(buffer, ..., ..., ...) instead of
-		// allocating a data buffer with each call
-		// return _sock.recv(buffer, 0, len, ZMQ.NOBLOCK);
-		throw new IllegalStateException("Method not implemented.");
-	}
+    public ZMQChannelType getType()
+    {
+        return _type;
+    }
 
-	/**
-	 * Shall receive a message. This is a blocking operation. <br>
-	 * <br>
-	 * The receive operation is not available for every {@link ZMQChannelType}.
-	 * Correct use is left to the application. <br>
-	 * <br>
-	 * See {@link Socket#recv(byte[], int, int, int)} for a detailed
-	 * description.
-	 * 
-	 * @return Number of bytes received.
-	 */
-	public byte[] receive() {
-		// TODO use _sock.recv(buffer, ..., ..., ...) instead of
-		// allocating a data buffer with each call
+    public Socket getSocket()
+    {
+        return _sock;
+    }
 
-		// Some how this dosen't work
-		// return _sock.recv(buffer, offset, len, 0);
-		return _sock.recv(0);
-	}
+    /**
+     * Sends data to socket. ZMQ requires the last byte of the data to
+     * be '0', that is <code>data[data.length - 1] = 0</code>. <br>
+     * <br>
+     * The send operation is not supported for all
+     * {@link ZMQChannelType}s. Correct use is left to the application.
+     * 
+     * @param data
+     */
+    public void send(byte[] data)
+    {
+        _sock.send(data, 0);
+    }
 
-	/**
-	 * See {@link #receive()}.
-	 * 
-	 * @param buffer
-	 * @param offset
-	 * @param len
-	 * @return
-	 */
-	public int receive(byte[] buffer, int offset, int len) {
-		// TODO use _sock.recv(buffer, ..., ..., ...) instead of
-		// allocating a data buffer with each call
+    /**
+     * Does exactly the same as {@link ZMQChannel#receive()} but does
+     * not block waiting for a message to arrive.
+     * 
+     * @param buffer
+     * @param offset
+     * @param len
+     * @return Number of bytes read into buffer.
+     */
+    public byte[] receiveNoblock()
+    {
+        // TODO use _sock.recv(buffer, ..., ..., ...) instead of
+        // allocating a data buffer with each call
+        return _sock.recv(ZMQ.NOBLOCK);
+    }
 
-		// Some how this dosen't work
-		// return _sock.recv(buffer, offset, len, 0);
-		throw new IllegalStateException("Method not implemented.");
-	}
+    /**
+     * See {@link #receiveNoblock()}.
+     * 
+     * @param buffer
+     * @param offset
+     * @param len
+     * @return
+     */
+    public int receiveNoblock(byte[] buffer, int offset, int len)
+    {
+        // TODO use _sock.recv(buffer, ..., ..., ...) instead of
+        // allocating a data buffer with each call
+        // return _sock.recv(buffer, 0, len, ZMQ.NOBLOCK);
+        throw new IllegalStateException("Method not implemented.");
+    }
 
-	/**
-	 * Terminates the socket releasing any resources. The channel is no longer
-	 * valid and has to be {@link #init()} and {@link #start()} again.
-	 */
-	public void close() {
-		_sock.close();
-		_ctx.term();
-	}
+    /**
+     * Shall receive a message. This is a blocking operation. <br>
+     * <br>
+     * The receive operation is not available for every
+     * {@link ZMQChannelType}. Correct use is left to the application. <br>
+     * <br>
+     * See {@link Socket#recv(byte[], int, int, int)} for a detailed
+     * description.
+     * 
+     * @return Number of bytes received.
+     */
+    public byte[] receive()
+    {
+        // TODO use _sock.recv(buffer, ..., ..., ...) instead of
+        // allocating a data buffer with each call
 
-	/**
-	 * Calls {@link #init()} and {@link #connect()}.
-	 */
-	public void connect() {
-		init();
-		start();
-	}
+        // Somehow this dosen't work
+        // return _sock.recv(buffer, offset, len, 0);
+        return _sock.recv(0);
+    }
 
-	/**
-	 * ZMQ socket type abstraction. Each enum maps to the <em>type</em> in the
-	 * <em>zmq_socket</em> function.
-	 * 
-	 * @see http://api.zeromq.org/2-1:zmq-socket
-	 */
-	public static enum ZMQChannelType {
-		/**
-		 * Server PUB/SUB channel.
+    /**
+     * See {@link #receive()}.
+     * 
+     * @param buffer
+     * @param offset
+     * @param len
+     * @return
+     */
+    public int receive(byte[] buffer, int offset, int len)
+    {
+        // TODO use _sock.recv(buffer, ..., ..., ...) instead of
+        // allocating a data buffer with each call
+
+        // Some how this dosen't work
+        // return _sock.recv(buffer, offset, len, 0);
+        throw new IllegalStateException("Method not implemented.");
+    }
+
+    /**
+     * Terminates the socket releasing any resources. The channel is no
+     * longer valid and has to be {@link #init()} and {@link #bind()}
+     * again.
+     */
+    public void close()
+    {
+        _sock.close();
+    }
+
+    /**
+     * Releases all ZMQ resources.
+     */
+    public static void destroy()
+    {
+        CTX.term();
+    }
+
+    /**
+     * ZMQ socket type abstraction. Each enum maps to the <em>type</em>
+     * in the <em>zmq_socket</em> function.
+     * 
+     * @see http://api.zeromq.org/2-1:zmq-socket
+     */
+    public static enum ZMQChannelType
+    {
+        /**
+         * Server PUB/SUB channel.
+         */
+        PUB, //
+
+        /**
+         * Client PUB/SUB channel.
+         */
+        SUB, //
+
+        /**
+         * Client REQ/REP channel.
+         */
+        REQ, //
+
+        /**
+         * Server REQ/REP channel.
+         */
+        REP,
+
+        /**
+		 * 
 		 */
-		PUB, //
+        PUSH_BIND,
 
-		/**
-		 * Client PUB/SUB channel.
+        /**
+		 * 
 		 */
-		SUB, //
+        PUSH_CONNECT,
 
-		/**
-		 * Client REQ/REP channel.
+        /**
+		 * 
 		 */
-		REQ, //
+        PULL_BIND,
 
-		/**
-		 * Server REQ/REP channel.
+        /**
+		 * 
 		 */
-		REP;
-	}
+        PULL_CONNECT
+    }
 }
