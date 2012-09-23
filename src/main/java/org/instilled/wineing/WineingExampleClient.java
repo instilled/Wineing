@@ -128,6 +128,8 @@ public class WineingExampleClient
             });
         }
 
+        
+        
         client.shutdown();
 
         // Shutdown hook
@@ -156,7 +158,8 @@ public class WineingExampleClient
         ZMQChannel chan = new ZMQChannel(ctx.schan, ZMQChannelType.REQ);
         chan.bind();
 
-        // Send cchan (publishing control messages on this channel)
+        // Send ctx.cchan (this is where response messages are expected
+        // to be received)
         Builder reqBuilder = Request.newBuilder();
         reqBuilder.setRequestId(1);
         reqBuilder.setType(Type.INIT);
@@ -186,13 +189,11 @@ public class WineingExampleClient
         String cchan_out = res.getCchanFqcn();
         String mchan = res.getMchanFqcn();
 
-        if (log.isDebugEnabled())
-        {
-            log.debug(String.format(
-                    "Exchanged ctrl [%s] and market [%s] endpoints", //
-                    cchan_out, //
-                    mchan));
-        }
+        log.info(String
+                .format("Synchronization terminated [ctrl_out: %s, ctrl_in: %s, market: %s]",
+                        cchan_out, //
+                        ctx.cchan, //
+                        mchan));
 
         ctx.cchan_out = cchan_out;
         ctx.mchan = mchan;
@@ -219,7 +220,7 @@ public class WineingExampleClient
         // TODO is there a better way to synchronize client and server?
         try
         {
-            Thread.sleep(500);
+            Thread.sleep(100);
         } catch (InterruptedException e)
         {
         }

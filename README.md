@@ -30,10 +30,10 @@ Running Wineing is easy. Once compiled the binary is available in
 `<wineing-root>/target/<wineing-version>/`. To invoke `wineing.exe`
 type
 
-    $ noglob <wineing-root>/target/<wineing-version>/wineing.exe \
-                    --cchan=<fqcn> \
-                    --mchan=<fqcn> \
-                    [--schan=<fqcn>] \
+    $ noglob <WINEING-ROOT>/target/<WINEING-VERSION>/wineing.exe \
+                    --schan=tcp://*:9999 \
+                    --cchan=tcp://*:9990 \
+                    --mchan=tcp://*:9992
                     [--tape-root=<dir>]
 
 The `noglob` option is only relevant to zsh users. It disables

@@ -35,7 +35,7 @@ typedef struct {
  * channel, and finally the a void pointer *obj* provided by the user
  * when calling *chan_recv* function.
  */
-typedef int (*chan_recvFn)(int size, void *data, void *obj);
+typedef int (*chan_recvFn)(void *data, size_t size, void *obj);
 typedef void (*chan_sendFreeFn)(void *buffer, void *hint);
 
 /**
@@ -106,9 +106,9 @@ inline int chan_recv(chan *c, chan_recvFn fn, void *obj)
     return rc;
   }
 
-  int size = zmq_msg_size (&message);
+  size_t size = zmq_msg_size (&message);
   void * data = zmq_msg_data(&message);
-  rc = fn(size, data, obj);
+  rc = fn(data, size, obj);
   zmq_msg_close(&message);
   return rc;
 }

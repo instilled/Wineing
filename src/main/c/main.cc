@@ -12,9 +12,9 @@ int main(int argc, char** argv)
 
   WineingConf conf;
 
+  conf.schan_fqcn   = DEFAULTS_SCHAN_NAME;
   conf.cchan_fqcn   = DEFAULTS_CCHAN_NAME;
   conf.mchan_fqcn   = DEFAULTS_MCHAN_NAME;
-  conf.schan_fqcn   = DEFAULTS_SCHAN_NAME;
   conf.tape_basedir = DEFAULTS_TAPE_BASE_DIR;
 
   cmd_parse(argc, argv, conf);
@@ -70,6 +70,10 @@ void cmd_parse(int argc, char** argv, WineingConf &conf)
   for(int i = 1; i < argc; i++) {
     switch(argv[i][2])
       {
+      case 's':
+        conf.schan_fqcn = cmd_parse_opt(argv[i]);
+        break;
+
       case 'c':
         conf.cchan_fqcn = cmd_parse_opt(argv[i]);
         allOpts |= 0x1;
@@ -83,10 +87,6 @@ void cmd_parse(int argc, char** argv, WineingConf &conf)
       case 't':
         conf.tape_basedir = cmd_parse_opt(argv[i]);
         break;
-
-      case 's':
-        conf.schan_fqcn = cmd_parse_opt(argv[i]);
-        break;
       }
   }
 
@@ -95,5 +95,3 @@ void cmd_parse(int argc, char** argv, WineingConf &conf)
     exit(1);
   }
 }
-
-
