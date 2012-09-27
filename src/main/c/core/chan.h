@@ -35,7 +35,7 @@ typedef struct {
  * channel, and finally the a void pointer *obj* provided by the user
  * when calling *chan_recv* function.
  */
-typedef int (*chan_recvFn)(void *data, size_t size, void *obj);
+typedef int (*chan_recvFn)(void *buffer, size_t size, void *obj);
 typedef void (*chan_sendFreeFn)(void *buffer, void *hint);
 
 /**
@@ -59,9 +59,12 @@ chan* chan_init(const char *fqcn, int type);
  * application uses multiple threads it is recommended to invoke
  * *chan_bind* in each thread separately.
  *
+ * \param c
+ * \return
+ *
  * \sa http://api.zeromq.org/2-1:zmq-ipc
  */
-void chan_bind(chan *c);
+int chan_bind(chan *c);
 
 /**
  * Closes a chan. Closing involves (in that order):
@@ -84,33 +87,37 @@ void chan_shutdown();
 /**
  * Receives a message from the control channel. If no message is
  * available *chan_recv_ctrl* will block until a message is available.
+ * After invocation of *fn* all ZMQ resources will be freed. The
+ * application is therefore required to copy any data that should
+ * persist the call to *fn*, e.g. by copying the buffer pointed by
+ * **obj*.
  *
- * \param c     The chan (control channel) to receive a message from.
- * \param msg   Request object (valid only if return == 1).
- * \return      If ZMQ call failed -1, -2 if parsing of message failed,
- *              or 0 in case of success.
+ * \param c     The chan (control channel) to receive a message from
+ * \param fn    Function invoked to parse the message. The function
+ *              is supposed to return -1 in case of error.
+ * \param *obj  Pointer to a user provided value, e.g. ptr to a buffer
+ * \return      If ZMQ call or message parsing fails -1, otherwise the
+ *              number of bytes read
  */
 inline int chan_recv(chan *c, chan_recvFn fn, void *obj)
 {
   zmq_msg_t message;
   zmq_msg_init (&message);
 
-  // Blocking until message is available.
-  int rc = zmq_recv (c->sock, &message, 0);
-  if(rc < 0) {
-    log(LOG_ERROR,                                                      \
-        "Failed receiving data on control channel [%s]. Error %s.",     \
-        c->fqcn,                                                        \
-        zmq_strerror(errno));
-    // zmq_msg_close(&message);
-    return rc;
+  // Blocks until message is available. Abuse of zmq_recv's return
+  // code. zmq_recv does not return the number of bytes read. Its
+  // return value is either -1 in case of an error or 0 otherwise. In
+  // case of success we set it to the number of bytes read.
+  int read = zmq_recv(c->sock, &message, 0);
+  if(read == 0) {
+    read = zmq_msg_size (&message);
+    void * data = zmq_msg_data(&message);
+    if(0 > fn(data, read, obj)) {
+      read = -1;
+    }
+    zmq_msg_close(&message);
   }
-
-  size_t size = zmq_msg_size (&message);
-  void * data = zmq_msg_data(&message);
-  rc = fn(data, size, obj);
-  zmq_msg_close(&message);
-  return rc;
+  return read;
 }
 
 inline int chan_send(chan *c,                              \
@@ -120,9 +127,13 @@ inline int chan_send(chan *c,                              \
 {
   zmq_msg_t out;
   void *hint = 0;
-  zmq_msg_init_data (&out, buffer, size, freeFn, hint);
+  zmq_msg_init_data(&out, buffer, size, freeFn, hint);
   return zmq_send (c->sock, &out, 0);
 }
 
+inline const char * chan_error()
+{
+  return zmq_strerror(errno);
+}
 
 #endif /* _CHAN_H */

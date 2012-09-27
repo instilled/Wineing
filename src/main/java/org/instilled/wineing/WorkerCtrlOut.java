@@ -15,14 +15,14 @@ public class WorkerCtrlOut implements Worker
     public static final Logger log = LoggerFactory
             .getLogger(WorkerCtrlOut.class);
 
-    private String _cchan_out;
+    private String _cchanOut;
     private BlockingQueue<Request> _ctrlQueue;
 
     private volatile boolean _running;
 
-    public WorkerCtrlOut(String cchan_out)
+    public WorkerCtrlOut(String cchanOut)
     {
-        _cchan_out = cchan_out;
+        _cchanOut = cchanOut;
         _ctrlQueue = new ArrayBlockingQueue<Request>(10);
     }
 
@@ -41,8 +41,8 @@ public class WorkerCtrlOut implements Worker
     {
         _running = true;
 
-        ZMQChannel ctrl_out = new ZMQChannel(_cchan_out,
-                ZMQChannelType.PUB);
+        ZMQChannel ctrl_out = new ZMQChannel(_cchanOut,
+                ZMQChannelType.PUSH_CONNECT);
         ctrl_out.bind();
 
         while (_running)

@@ -14,10 +14,9 @@ option java_outer_classname = "WineingCtrlProto";
 message Request {
 
   enum Type {
-     INIT     = 0;
-     START    = 1; // Sent to start streaming market data
-     STOP     = 2; // Sent to stop streaming market data
-     SHUTDOWN = 3; // Shutdowns the application
+     START    = 0; // Sent to start streaming market data
+     STOP     = 1; // Sent to stop streaming market data
+     SHUTDOWN = 2; // Shutdowns the application
   }
 
   // A unique id identifying the request.
@@ -31,9 +30,6 @@ message Request {
   // type file, otherwise wineing tries to connect to the
   // real-time feed.
   optional string tape_file = 3;
-
-  // Only relevant if Request::type == INIT
-  optional string cchan_fqcn = 4;
 }
 
 // Message sent as a response to a request.
@@ -41,16 +37,12 @@ message Response {
 
   required int64 requestId = 1;   // The id of the request
 
-  enum ResponseCode {
-     INIT    = 0;
-     OK      = 1;   // if Request was processed
-     ERR     = 2;   // if Request failed.
+  enum Type {
+     OK      = 0;
+     ERR     = 1;
+     ERR_MARKET_RUNNING = 2;
   }
 
-  required ResponseCode code = 2;
-  optional string text = 3;       // only if code == ERR
-                                  // text representation of the error
-                                  // that occured
-  optional string mchan_fqcn = 4;
-  optional string cchan_fqcn = 5;
+  required Type type = 2;
+  optional string err_text = 3;
 }

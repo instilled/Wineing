@@ -37,39 +37,7 @@ public class ZMQChannel
      */
     private void init()
     {
-        int type;
-
-        switch (_type)
-        {
-        case PUB:
-            type = ZMQ.PUB;
-            break;
-        case SUB:
-            type = ZMQ.SUB;
-            break;
-
-        case PUSH_BIND:
-        case PUSH_CONNECT:
-            type = ZMQ.PUSH;
-
-        case PULL_BIND:
-        case PULL_CONNECT:
-            type = ZMQ.PULL;
-
-        case REP:
-            type = ZMQ.REP;
-            break;
-        case REQ:
-            type = ZMQ.REQ;
-            break;
-
-        default:
-            throw new IllegalStateException(
-                    "Could not initialize ZMQChannel. Invalid type ["
-                            + _type + "].");
-        }
-
-        _sock = CTX.socket(type);
+        _sock = CTX.socket(_type.getNativeType());
     }
 
     /**
@@ -126,8 +94,7 @@ public class ZMQChannel
     }
 
     /**
-     * Sends data to socket. ZMQ requires the last byte of the data to
-     * be '0', that is <code>data[data.length - 1] = 0</code>. <br>
+     * Sends data to socket.<br>
      * <br>
      * The send operation is not supported for all
      * {@link ZMQChannelType}s. Correct use is left to the application.
@@ -239,41 +206,53 @@ public class ZMQChannel
         /**
          * Server PUB/SUB channel.
          */
-        PUB, //
+        PUB(ZMQ.PUB), //
 
         /**
          * Client PUB/SUB channel.
          */
-        SUB, //
+        SUB(ZMQ.SUB), //
 
         /**
          * Client REQ/REP channel.
          */
-        REQ, //
+        REQ(ZMQ.REQ), //
 
         /**
          * Server REQ/REP channel.
          */
-        REP,
+        REP(ZMQ.REP),
 
         /**
 		 * 
 		 */
-        PUSH_BIND,
+        PUSH_BIND(ZMQ.PUSH),
 
         /**
 		 * 
 		 */
-        PUSH_CONNECT,
+        PUSH_CONNECT(ZMQ.PUSH),
 
         /**
 		 * 
 		 */
-        PULL_BIND,
+        PULL_BIND(ZMQ.PULL),
 
         /**
 		 * 
 		 */
-        PULL_CONNECT
+        PULL_CONNECT(ZMQ.PULL);
+
+        private int _type;
+
+        private ZMQChannelType(int type)
+        {
+            _type = type;
+        }
+
+        public int getNativeType()
+        {
+            return _type;
+        }
     }
 }

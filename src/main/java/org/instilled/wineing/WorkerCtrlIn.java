@@ -19,15 +19,15 @@ public class WorkerCtrlIn implements Worker
     public static final Logger log = LoggerFactory
             .getLogger(WorkerCtrlIn.class);
 
-    private String _cchan;
+    private String _cchanIn;
     private ResponseProcessor _defaultResponseProcessor;
     private Map<Long, ResponseProcessor> _responseProcessors;
 
     private volatile boolean _running;
 
-    public WorkerCtrlIn(String cchan)
+    public WorkerCtrlIn(String cchanIn)
     {
-        _cchan = cchan;
+        _cchanIn = cchanIn;
         _responseProcessors = Collections
                 .synchronizedMap(new HashMap<Long, ResponseProcessor>());
         setDefaultResponseProcessor(null);
@@ -53,8 +53,8 @@ public class WorkerCtrlIn implements Worker
     {
         // Start incoming channel. Listens to replies from
         // Wineing
-        ZMQChannel cchan_in = new ZMQChannel(_cchan,
-                ZMQChannelType.PULL_BIND);
+        ZMQChannel cchan_in = new ZMQChannel(_cchanIn,
+                ZMQChannelType.PULL_CONNECT);
         cchan_in.bind();
 
         while (_running)

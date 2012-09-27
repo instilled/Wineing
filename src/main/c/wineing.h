@@ -1,91 +1,87 @@
 
-#ifndef __WINEING_H
-#define __WINEING_H
+#ifndef _WINEING_H
+#define _WINEING_H
 
 #include "core/inxcore.h"
 #include "logging/logging.h"
 
 
 // Application defaults
-#define DEFAULTS_SCHAN_NAME           "tcp://*:9999"
-#define DEFAULTS_CCHAN_NAME           "tcp://*:9990"
-#define DEFAULTS_MCHAN_NAME           "tcp://*:9992"
-#define DEFAULTS_TAPE_BASE_DIR        "C:\\md\\"
-
+#define DEFAULTS_CCHAN_IN_NAME            "tcp://*:9990"
+#define DEFAULTS_CCHAN_OUT_NAME           "tcp://*:9991"
+#define DEFAULTS_MCHAN_NAME               "tcp://*:9992"
+#define DEFAULTS_TAPE_BASE_DIR            "C:\\md\\"
+#define DEFAULTS_SHARED_DATA_SIZE        1024
+#define DEFAULTS_SHARED_VERSION          -1
+#define DEFAULTS_CCHAN_BUFFER_SIZE       2048
 
 // Messaging
-#define WINEING_MSG_MARKET_SHUTDOWN   0
-#define WINEING_MSG_MARKET_STOP       1
-#define WINEING_MSG_MARKET_RUN        2
+#define WINEING_SHARED_CMD_INIT          0
+#define WINEING_SHARED_CMD_SHUTDOWN      1
+#define WINEING_SHARED_CMD_MARKET_STOP   2
+#define WINEING_SHARED_CMD_MARKET_RUN    3
+#define WINEING_INPROC_CCHAN_OUT          "inproc://ctrl.out"
 
 /**
  * \struct
  *
- * TBD
+ * The configuration as modified by command line arguments passed to
+ * program invocation.
  */
 typedef struct
 {
-  int ctrl;    // One of WINEING_MSG_*
-  void *data;  // Anything
-} WineingMsg;
-
-/**
- * \struct
- *
- * TBD
- */
-typedef struct
-{
-  const char *schan_fqcn;
-  const char *cchan_fqcn;
+  const char *cchan_in_fqcn;
+  const char *cchan_out_fqcn;
   const char *mchan_fqcn;
   const char *tape_basedir;
-} WineingConf;
+} w_conf;
 
 /**
  * \struct
  *
- * TBD
+ * Wineing context.
  */
 typedef struct
 {
   HINSTANCE nxCoreLib;
-  const char *cchan_fqcn_out;
-  WineingConf *conf;
-} WineingCtx;
+  w_conf *conf;
+} w_ctx;
 
 
 /**
- *
+ * Initializes Wineing.
  */
-void wineing_init(WineingCtx &);
+void wineing_init(w_ctx &);
 
 /**
- *
+ * Runs Wineing by creating the three threads (see functions below)
+ * - cchan_in_thread
+ * - cchan_out_thread
+ * - market_thread
  */
-void wineing_run(WineingCtx &);
+void wineing_run(w_ctx &);
 
 /**
- *
+ * Frees any resources allocated by Wineing and does a clean shutdown.
  */
-void wineing_shutdown(WineingCtx &);
+void wineing_shutdown(w_ctx &);
 
 /**
- *
+ * Thread listening for incoming control requests. Responses to
+ * control Requests are never sent directly to the client but instead
+ * send to *cchan_out_thread*.
  */
-int wineing_wait_for_client(WineingCtx &);
+void* cchan_in_thread(void*);
 
 /**
- *
+ * Thread sending Responses to the client(s).
  */
-void* ctrl_thread(void*);
+void* cchan_out_thread(void*);
 
 /**
- *
+ * Thread sending market data to clients. Any non market data related
+ * messages, e.g. errors, are sent to *cchan_out_thread*.
  */
 void* market_thread(void*);
 
-
-//void sigproc(int);
-
-#endif /* __WINEING_H */
+#endif /* _WINEING_H */

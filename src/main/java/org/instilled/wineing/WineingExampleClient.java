@@ -15,16 +15,12 @@ import org.instilled.wineing.core.ResponseProcessor;
 import org.instilled.wineing.core.WineingRemoteAPI;
 import org.instilled.wineing.core.Worker;
 import org.instilled.wineing.core.ZMQChannel;
-import org.instilled.wineing.core.ZMQChannel.ZMQChannelType;
 import org.instilled.wineing.gen.WineingCtrlProto.Request;
 import org.instilled.wineing.gen.WineingCtrlProto.Request.Builder;
 import org.instilled.wineing.gen.WineingCtrlProto.Request.Type;
 import org.instilled.wineing.gen.WineingCtrlProto.Response;
-import org.instilled.wineing.gen.WineingCtrlProto.Response.ResponseCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.google.protobuf.InvalidProtocolBufferException;
 
 /**
  * Issues:
@@ -49,13 +45,15 @@ public class WineingExampleClient
     {
         // Command line stuff
         CommandLine cmd = parseCMDLine(args);
-        String schan = cmd.getOptionValue("schan");
-        String cchan = cmd.getOptionValue("cchan");
+        String cchan_in = cmd.getOptionValue("cchan-in");
+        String cchan_out = cmd.getOptionValue("cchan-out");
+        String mchan = cmd.getOptionValue("mchan");
         String tape = cmd.getOptionValue("tape-file");
 
         WineingClientCtx ctx = new WineingClientCtx();
-        ctx.schan = schan;
-        ctx.cchan = cchan;
+        ctx.cchan_in = cchan_in;
+        ctx.cchan_out = cchan_out;
+        ctx.mchan = mchan;
 
         log.debug("Starting "
                 + WineingExampleClient.class.getSimpleName());
@@ -74,11 +72,11 @@ public class WineingExampleClient
                 public void process(Response r)
                 {
                     log.info(String
-                            .format("Response for %s received [id: %i, code: %s, text: %s]", //
+                            .format("Response for %s received [id: %i, type: %s, error text: %s]", //
                                     Request.Type.START, //
                                     r.getRequestId(), //
-                                    r.getCode(), //
-                                    r.getText()));
+                                    r.getType(), //
+                                    r.getErrorText()));
                 }
             });
 
@@ -89,11 +87,11 @@ public class WineingExampleClient
                 public void process(Response r)
                 {
                     log.info(String
-                            .format("Response for %s received [id: %i, code: %s, text: %s]", //
+                            .format("Response for %s received [id: %i, type: %s, error text: %s]", //
                                     Request.Type.START, //
                                     r.getRequestId(), //
-                                    r.getCode(), //
-                                    r.getText()));
+                                    r.getType(), //
+                                    r.getErrorText()));
                 }
             });
 
@@ -103,11 +101,11 @@ public class WineingExampleClient
                 public void process(Response r)
                 {
                     log.info(String
-                            .format("Response for %s received [id: %i, code: %s, text: %s]", //
+                            .format("Response for %s received [id: %i, type: %s, error text: %s]", //
                                     Request.Type.SHUTDOWN, //
                                     r.getRequestId(), //
-                                    r.getCode(), //
-                                    r.getText()));
+                                    r.getType(), //
+                                    r.getErrorText()));
                 }
             });
 
@@ -123,13 +121,25 @@ public class WineingExampleClient
                             .format("Response for %s received [id: %i, code %s]", //
                                     Request.Type.SHUTDOWN, //
                                     r.getRequestId(), //
-                                    r.getCode()));
+                                    r.getType()));
+
+                    for (Worker worker : client._workers)
+                    {
+                        worker.shutdown();
+                    }
+                    ZMQChannel.destroy();
                 }
             });
         }
 
-        
-        
+        // Wait a moment for operations to complete
+        try
+        {
+            Thread.sleep(10000);
+        } catch (InterruptedException e)
+        {
+        }
+
         client.shutdown();
 
         // Shutdown hook
@@ -140,8 +150,6 @@ public class WineingExampleClient
             {
                 log.debug("Shutting down "
                         + WineingExampleClient.class.getSimpleName());
-                client.api().shutdown(null);
-                client.shutdown();
             }
         });
     }
@@ -151,69 +159,16 @@ public class WineingExampleClient
         _ctx = ctx;
     }
 
-    private void connectToServer(WineingClientCtx ctx)
-    {
-        log.info("Synchronizing with server");
-
-        ZMQChannel chan = new ZMQChannel(ctx.schan, ZMQChannelType.REQ);
-        chan.bind();
-
-        // Send ctx.cchan (this is where response messages are expected
-        // to be received)
-        Builder reqBuilder = Request.newBuilder();
-        reqBuilder.setRequestId(1);
-        reqBuilder.setType(Type.INIT);
-        reqBuilder.setCchanFqcn(ctx.cchan);
-        Request req = reqBuilder.build();
-        chan.send(req.toByteArray());
-
-        // Receive channel information
-        byte[] buf = chan.receive();
-        Response res;
-        try
-        {
-            res = Response.parseFrom(buf);
-        } catch (InvalidProtocolBufferException e)
-        {
-            throw new IllegalStateException(
-                    "Failed to receive INIT message from Wineing", e);
-        }
-
-        if (!(ResponseCode.INIT.equals(res.getCode()) && //
-                res.hasCchanFqcn() && res.hasMchanFqcn()))
-        {
-            throw new IllegalStateException(
-                    "Did not receive either CCHAN-in or MCHAN fqcn");
-        }
-
-        String cchan_out = res.getCchanFqcn();
-        String mchan = res.getMchanFqcn();
-
-        log.info(String
-                .format("Synchronization terminated [ctrl_out: %s, ctrl_in: %s, market: %s]",
-                        cchan_out, //
-                        ctx.cchan, //
-                        mchan));
-
-        ctx.cchan_out = cchan_out;
-        ctx.mchan = mchan;
-    }
-
     public void start()
     {
         log.debug("Initializing " + getClass().getSimpleName());
 
         // First we need to create the 'server' channel that will
         // listen for incoming Response messages sent by Wineing.
-        WorkerCtrlIn workerCtrlIn = new WorkerCtrlIn(_ctx.cchan);
+        WorkerCtrlIn workerCtrlIn = new WorkerCtrlIn(_ctx.cchan_in);
         _workers.add(workerCtrlIn);
         Thread worker_ctrl_in = new Thread(workerCtrlIn);
         worker_ctrl_in.start();
-
-        // We can now connect to the server exchanging ctrl and market
-        // data channel endpoints (sets them in WineingClientCtx). Both
-        // are server channels that we will connect to later.
-        connectToServer(_ctx);
 
         // Give the server time to create the server sockets we connect
         // to as we might fail to connect to the channels otherwise.
@@ -242,11 +197,7 @@ public class WineingExampleClient
 
     public void shutdown()
     {
-        for (Worker worker : _workers)
-        {
-            worker.shutdown();
-        }
-        ZMQChannel.destroy();
+
     }
 
     public WineingRemoteAPI api()
@@ -256,8 +207,7 @@ public class WineingExampleClient
 
     private static class WineingClientCtx
     {
-        private String schan;
-        private String cchan;
+        private String cchan_in;
         private String cchan_out;
         private String mchan;
     }
@@ -336,7 +286,7 @@ public class WineingExampleClient
 
         private static long getRequestId()
         {
-            return System.currentTimeMillis();
+            return System.nanoTime();
         }
     }
 
@@ -373,9 +323,10 @@ public class WineingExampleClient
                 .withArgName("fqcn")
                 .isRequired()
                 .withDescription(
-                        "Synchronization socket.                               " //
-                                + "ZMQ REQ/REP socket")
-                .withLongOpt("schan").create("s"));
+                        "Control channel-in. Where the application receives    " //
+                                + "response messages from Wineing. This is a   " //
+                                + "ZMQ PUSH/PULL socket")
+                .withLongOpt("cchan-in").create("i"));
 
         // cchan option
         o.addOption(OptionBuilder
@@ -383,11 +334,20 @@ public class WineingExampleClient
                 .withArgName("fqcn")
                 .isRequired()
                 .withDescription(
-                        "Control channel name.                                 " //
-                                + "The control channel is a synchronous ZMQ " //
-                                + "channel. The client shall connect with ZMQ's " //
-                                + "REP to this channel.")
-                .withLongOpt("cchan").create("c"));
+                        "Control channel-out. Used to send control messages    "//
+                                + "to Wineing. It is a ZMQ PUSH/PULL channel.") //
+                .withLongOpt("cchan-out").create("o"));
+
+        // cchan option
+        o.addOption(OptionBuilder
+                .hasArg()
+                .withArgName("fqcn")
+                .isRequired()
+                .withDescription(
+                        "Market data channel. The application receives market  " //
+                                + "data updates on this channel. It's a ZMQ    "//
+                                + "PUB/SUB channel.") //
+                .withLongOpt("mchan").create("m"));
 
         o.addOption(OptionBuilder
                 .hasArg()

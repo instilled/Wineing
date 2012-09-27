@@ -1,7 +1,7 @@
 
 #include "wineing.h"
 
-void cmd_parse(int, char**, WineingConf &);
+void cmd_parse(int, char**, w_conf &);
 
 int main(int argc, char** argv)
 {
@@ -10,12 +10,12 @@ int main(int argc, char** argv)
   //signal(SIGINT, sigproc);
   //signal(SIGQUIT, sigproc);
 
-  WineingConf conf;
+  w_conf conf;
 
-  conf.schan_fqcn   = DEFAULTS_SCHAN_NAME;
-  conf.cchan_fqcn   = DEFAULTS_CCHAN_NAME;
-  conf.mchan_fqcn   = DEFAULTS_MCHAN_NAME;
-  conf.tape_basedir = DEFAULTS_TAPE_BASE_DIR;
+  conf.cchan_in_fqcn  = DEFAULTS_CCHAN_IN_NAME;
+  conf.cchan_out_fqcn = DEFAULTS_CCHAN_OUT_NAME;
+  conf.mchan_fqcn     = DEFAULTS_MCHAN_NAME;
+  conf.tape_basedir   = DEFAULTS_TAPE_BASE_DIR;
 
   cmd_parse(argc, argv, conf);
 
@@ -25,7 +25,7 @@ int main(int argc, char** argv)
   // application! HAHAHAHA!
   //MessageBox(NULL, "I'm Wineing!", "", MB_OK);
 
-  WineingCtx ctx;
+  w_ctx ctx;
   ctx.conf = &conf;
 
   wineing_init(ctx);
@@ -38,20 +38,19 @@ int main(int argc, char** argv)
 void cmd_print_usage()
 {
   printf("Usage: wineing.exe "
-         "--cchan=<fqcn> "
+         "--cchan-in=<fqcn> "
+         "--cchan-out=<fqcn> "
          "--mchan=<fqcn> "
-         "[--schan=<fqcn>] "
          "[--tape-root=<dir>]\n\n");
 
   printf("Wineing TBD.\n\n");
   printf("ZMQ channels:\n");
-  printf("  --cchan          Incoming control messages channel (binds to a\n");
+  printf("  --cchan-in       Incoming control messages channel (binds to a\n");
+  printf("                   ZMQ PULL socket)\n");
+  printf("  --cchan-out      Outgoing control messages channel (binds to a\n");
   printf("                   ZMQ PUSH socket)\n");
   printf("  --mchan          Market data channel (binds to a ZMQ PUB socket\n");
   printf("                   socket)\n");
-  printf("  [--schan]        Optional. Sync channel (synchronous ZMQ REQ/REP\n");
-  printf("                   socket)\n");
-  printf("                   Defaults to 'tcp://localhost:9991'\n\n");
   printf("NxCore related options:\n");
   printf("  [--tape-root]    The directory from which to serve the tape files\n");
   printf("                   Defaults to 'C:\\md\\'. The path has to end "
@@ -64,24 +63,25 @@ char * cmd_parse_opt(char *argv)
   return &argv[eq+1];
 }
 
-void cmd_parse(int argc, char** argv, WineingConf &conf)
+void cmd_parse(int argc, char** argv, w_conf &conf)
 {
   int allOpts = 0;
   for(int i = 1; i < argc; i++) {
     switch(argv[i][2])
       {
-      case 's':
-        conf.schan_fqcn = cmd_parse_opt(argv[i]);
-        break;
-
       case 'c':
-        conf.cchan_fqcn = cmd_parse_opt(argv[i]);
-        allOpts |= 0x1;
+        if(argv[i][8] == 'i') {
+          conf.cchan_in_fqcn = cmd_parse_opt(argv[i]);
+          allOpts |= 0x1;
+        } else {
+          conf.cchan_out_fqcn = cmd_parse_opt(argv[i]);
+          allOpts |= 0x2;
+        }
         break;
 
       case 'm':
         conf.mchan_fqcn = cmd_parse_opt(argv[i]);
-        allOpts |= 0x2;
+        allOpts |= 0x4;
         break;
 
       case 't':
@@ -90,7 +90,7 @@ void cmd_parse(int argc, char** argv, WineingConf &conf)
       }
   }
 
-  if(allOpts != 3) {
+  if(allOpts != 7) {
     cmd_print_usage();
     exit(1);
   }

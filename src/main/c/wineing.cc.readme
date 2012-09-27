@@ -1,0 +1,82 @@
+/*
+   Design decisions:
+
+   * ZMQ related decisions
+   ** Number of sockets
+   ** Socket types
+
+   * Threading
+   ** Synchronization
+   ** Memory fencing and locking
+
+
+ */
+/*
+ * TODO:
+ *
+ * - better error handling
+ * - command line argument parsing
+ * - add comments
+ * - use tcmalloc (googles perftools library [provided by AUR on arch].
+ *   > provides heapcheck, heapprofile, and cpuprofile (nicE!!!)
+ *   > http://code.google.com/p/gperftools/wiki/GooglePerformanceTools
+ * - efficient (space, time) market data structure (get familiar with
+ *   NxCore message structure)
+ * - logging facility uses its own thread
+ * - interrupt CTRL-C and KILL signals (kind of a shutdown hook)
+ *   > clean shutdown to free resources, e.g. memory, sockets, ...
+ * - switch to asynchronous control channel
+ * - profiling
+ *   > gprof: http://www.cs.utah.edu/dept/old/texinfo/as/gprof.html
+ *   > http://stackoverflow.com/questions/375913/w
+ hat-can-i-use-to-profile-c-code-in-linux
+ * - Traffic/Resource monitoring
+ *   > list of good tools
+ *     http://www.cyberciti.biz/tips/top-linux-monitoring-tools.html
+ *   > ntop seems to be the best (rt, many features, web-server, ...),
+ *     iptraf
+ */
+
+/*
+  Notes on sharing state between threads in C/C++.
+
+  Atomic operations are not supported by C/C++ (before c++11
+  standard). Some compilers such as GCC or Intel C Compiler support
+  compiler extensions that will make use of the cpu's instruction for
+  atomic operations (memory barriers aka fence, cas,
+  ...). Alternatives are: boost library (not preferred), cache line
+  alignment, mutex (too slow for certain), use counter and check (poll
+  state) periodically.
+
+  I have yet to see if whether we achieve better performance using
+  these extensions/functions or by cache line alignment.
+
+  // This aligns code on 64 byte boundaries. The struct will thus
+  // be padded with 56 bytes.
+  typedef struct
+  {
+    int a __attribute__((aligned(64)));
+    int b;
+  } my_type;
+
+*/
+
+/*
+  Notes on debugging.
+
+  I have tried to debug the final executable. Unfortunately without
+  success. This is (most probably) due to the fact that we are linking
+  C, C++ and Windows code together in one executable.
+
+  Unfortunately I did not figure out how to get winedbg to work with
+  that language/platform mix. Maybe I'm completely wrong and things
+  fails somewhere else.
+
+  An alternative would be to get a zmq.dll and a protobuf.dll and do
+  everything in the windows world. I doupt that IPC calls will be
+  possible with that approach but again, I might just be wrong.
+
+  There's a rather brief blogpost about building a zmq.dll with
+  winelib
+  http://wine.1045685.n5.nabble.com/building-a-winelib-dll-td3271834.html
+*/
