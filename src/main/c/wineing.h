@@ -11,15 +11,18 @@
 #define DEFAULTS_CCHAN_OUT_NAME           "tcp://*:9991"
 #define DEFAULTS_MCHAN_NAME               "tcp://*:9992"
 #define DEFAULTS_TAPE_BASE_DIR            "C:\\md\\"
-#define DEFAULTS_SHARED_DATA_SIZE        1024
-#define DEFAULTS_SHARED_VERSION          -1
-#define DEFAULTS_CCHAN_BUFFER_SIZE       2048
+#define DEFAULTS_SHARED_VERSION_INIT     -1
+#define DEFAULTS_CCHAN_BUFFER_SIZE        2048
 
-// Messaging
-#define WINEING_SHARED_CMD_INIT          0
-#define WINEING_SHARED_CMD_SHUTDOWN      1
-#define WINEING_SHARED_CMD_MARKET_STOP   2
-#define WINEING_SHARED_CMD_MARKET_RUN    3
+// Values for w_ctrl.cmd
+#define WINEING_CTRL_CMD_INIT             0
+#define WINEING_CTRL_CMD_SHUTDOWN         1
+#define WINEING_CTRL_CMD_MARKET_STOP      2
+#define WINEING_CTRL_CMD_MARKET_RUN       3
+#define WINEING_CTRL_DEFAULT_DATA_SIZE    1024
+
+// The channel response/notification messages
+// are sent to cchan_out_thread
 #define WINEING_INPROC_CCHAN_OUT          "inproc://ctrl.out"
 
 /**
@@ -47,6 +50,12 @@ typedef struct
   w_conf *conf;
 } w_ctx;
 
+typedef struct
+{
+  int cmd;       // the command
+  char *data;    // data buffer
+  size_t size;   // data buffer's size
+} w_ctrl;
 
 /**
  * Initializes Wineing.

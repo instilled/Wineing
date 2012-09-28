@@ -33,7 +33,7 @@
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 
-#include "lazy.h"
+#include "core/lazy.h"
 
 /**
  * The application context. Its access is unsyncronized and
@@ -54,12 +54,16 @@ static w_ctx g_ctx;
  * but also to exchange other data. To assure each thread sees the
  * correct values it is required to follow a few rules:
  *
- * 1) to update the value use *update_gloabl_if_owner_or_forced*
+ * 1) to update the value use *update_gloabl_if_owner*
  * 2) to read the value only with *lazy_update_local_if_changed*
  *
  * There's a plethora of details on the topic in lazy.h
  */
-w_shared *g_data = new w_shared;
+static w_ctrl g_data = {
+  WINEING_CTRL_CMD_INIT,
+  new char[WINEING_CTRL_DEFAULT_DATA_SIZE],
+  0
+};
 
 /**
  * Used to make the *market_thread* sleep if the user has either not
@@ -68,7 +72,6 @@ w_shared *g_data = new w_shared;
 static pthread_mutex_t g_market_sync_mutex;
 static pthread_cond_t  g_market_sync_cond;
 
-
 void wineing_init(w_ctx &ctx)
 {
   log(LOG_INFO, "Initializing wineing");
@@ -76,6 +79,8 @@ void wineing_init(w_ctx &ctx)
   // The global context is used only because of the nxcore
   // callback. See comments above.
   g_ctx = ctx;
+
+  lazy_init();
 
   // Verify the version of the library we linked against is compatible
   // with the version of the headers generated.
@@ -90,10 +95,6 @@ void wineing_init(w_ctx &ctx)
 
   pthread_mutex_init(&g_market_sync_mutex, NULL);
   pthread_cond_init(&g_market_sync_cond, NULL);
-
-  g_data = new w_shared;
-  g_data->cmd = WINEING_SHARED_CMD_INIT;
-  g_data->data = new char[DEFAULTS_SHARED_DATA_SIZE];
 }
 
 void wineing_run(w_ctx &ctx)
@@ -130,6 +131,8 @@ void wineing_shutdown(w_ctx &ctx)
 
   // Free any protobuf specific resources
   google::protobuf::ShutdownProtobufLibrary();
+
+  lazy_destroy();
 }
 
 /**
@@ -163,6 +166,28 @@ void _send_free(void *buffer, void *hint)
   delete (char*)buffer;
 }
 
+static inline void t_to_g (const void *t, void *g)
+{
+  const w_ctrl *local = (const w_ctrl*)t;
+  w_ctrl *shared = (w_ctrl*)g;
+
+  shared->size = local->size;
+  if(0 < local->size) {
+    memcpy(shared->data, local->data, local->size);
+  }
+}
+
+static inline void g_to_t(void *t, const void *g)
+{
+  w_ctrl *local = (w_ctrl*)t;
+  const w_ctrl *shared = (const w_ctrl*)g;
+
+  local->size = shared->size;
+  if(0 < shared->size) {
+    memcpy(local->data, shared->data, shared->size);
+  }
+}
+
 /**
  * The controlling thread. It waits for the client to send control
  * messages to Wineing.
@@ -180,10 +205,10 @@ void* cchan_in_thread(void *_ctx)
   static std::stringstream err;
   static std::stringstream tape;
   static char buffer[DEFAULTS_CCHAN_BUFFER_SIZE];
-  static int t_version = DEFAULTS_SHARED_VERSION;
-  static w_shared t_data = {
-    WINEING_SHARED_CMD_INIT,
-    new char[DEFAULTS_SHARED_DATA_SIZE],
+  static int t_version = DEFAULTS_SHARED_VERSION_INIT;
+  static w_ctrl t_data = {
+    WINEING_CTRL_CMD_INIT,
+    new char[WINEING_CTRL_DEFAULT_DATA_SIZE],
     0
   };
 
@@ -237,7 +262,7 @@ void* cchan_in_thread(void *_ctx)
         case Request::START:
           // Check that the market data thread is not already
           // started. If so send an error back to the client.
-          if(g_data->cmd == WINEING_SHARED_CMD_MARKET_RUN) {
+          if(t_data.cmd == WINEING_CTRL_CMD_MARKET_RUN) {
             err << "Already in RUNNING state.";
             res.set_type(Response::ERR_MARKET_RUNNING);
             res.set_err_text(err.str());
@@ -276,12 +301,11 @@ void* cchan_in_thread(void *_ctx)
           }
 
           // Update g_data
-          t_version++;
-          t_data.cmd = WINEING_SHARED_CMD_MARKET_RUN;
-          update_global_if_owner_or_forced(t_version,
-                                           &t_data,
-                                           g_data,
-                                           1);
+          t_data.cmd = WINEING_CTRL_CMD_MARKET_RUN;
+          t_version = lazy_update_global_if_owner(t_version,
+                                                  &t_data,
+                                                  &g_data,
+                                                  t_to_g);
 
           pthread_mutex_lock( &g_market_sync_mutex );
           pthread_cond_signal( &g_market_sync_cond );
@@ -289,21 +313,19 @@ void* cchan_in_thread(void *_ctx)
           break;
 
         case Request::STOP:
-          t_version++;
-          t_data.cmd = WINEING_SHARED_CMD_MARKET_STOP;
-          update_global_if_owner_or_forced(t_version,
-                                           &t_data,
-                                           g_data,
-                                           1);
+          t_data.cmd = WINEING_CTRL_CMD_MARKET_STOP;
+          t_version = lazy_update_global_if_owner(t_version,
+                                                  &t_data,
+                                                  &g_data,
+                                                  t_to_g);
           break;
 
         case Request::SHUTDOWN:
-          t_version++;
-          t_data.cmd = WINEING_SHARED_CMD_SHUTDOWN;
-          update_global_if_owner_or_forced(t_version,
-                                           &t_data,
-                                           g_data,
-                                           1);
+          t_data.cmd = WINEING_CTRL_CMD_SHUTDOWN;
+          t_version = lazy_update_global_if_owner(t_version,
+                                                  &t_data,
+                                                  &g_data,
+                                                  t_to_g);
           running = 0;
           break;
         }
@@ -338,16 +360,17 @@ int __stdcall processTape(const NxCoreSystem *pNxCoreSys, \
   // risky if the UserData (mchan) changes. We know that Winieng never
   // reallocates a new chan structure during its lifetime.
   static MarketData m;
-  static int t_version = DEFAULTS_SHARED_VERSION;
-  static w_shared t_data = {
-    WINEING_SHARED_CMD_INIT,
-    new char[DEFAULTS_SHARED_DATA_SIZE],
+  static int t_version = DEFAULTS_SHARED_VERSION_INIT;
+  static w_ctrl t_data = {
+    WINEING_CTRL_CMD_INIT,
+    new char[WINEING_CTRL_DEFAULT_DATA_SIZE],
     0
   };
 
   t_version = lazy_update_local_if_changed(t_version,
                                            &t_data,
-                                           g_data);
+                                           &g_data,
+                                           g_to_t);
 
   // Because we reuse protobuf objects we have to clear them
   m.Clear();
@@ -399,10 +422,10 @@ void* market_thread(void *_ctx)
   chan *cchan_out_mem;
   chan *mchan;
   // Thread local version of the shared state
-  static int t_version = DEFAULTS_SHARED_VERSION;
-  static w_shared t_data = {
-    WINEING_SHARED_CMD_INIT,
-    new char[DEFAULTS_SHARED_DATA_SIZE],
+  static int t_version = DEFAULTS_SHARED_VERSION_INIT;
+  static w_ctrl t_data = {
+    WINEING_CTRL_CMD_INIT,
+    new char[WINEING_CTRL_DEFAULT_DATA_SIZE],
     0
   };
 
@@ -423,7 +446,7 @@ void* market_thread(void *_ctx)
   }
 
   while(1) {
-    // If WINEING_SHARED_CMD_MARKET_STOP was requested we block until
+    // If WINEING_CTRL_CMD_MARKET_STOP was requested we block until
     // START is requested. The *cchan_in* thread will notify us.
     pthread_mutex_lock( &g_market_sync_mutex );
     pthread_cond_wait( &g_market_sync_cond, &g_market_sync_mutex );
@@ -435,17 +458,18 @@ void* market_thread(void *_ctx)
     while(1) {
       t_version = lazy_update_local_if_changed(t_version,
                                                &t_data,
-                                               g_data);
+                                               &g_data,
+                                               g_to_t);
       log(LOG_DEBUG, "Loading nxcore tape [%s]",
           t_data.size == 0 ? "real-time" : t_data.data);
 
-      if(t_data.cmd == WINEING_SHARED_CMD_MARKET_RUN) {
+      if(t_data.cmd == WINEING_CTRL_CMD_MARKET_RUN) {
         log(LOG_DEBUG, " ... running nxcore");
         //inxcore_run(ctx->nxCoreLib, processTape, msg_data, NULL);
       }
 
       // Loop as long as no shutdown is requested (g_msg.ctrl == 0)
-      if(t_data.cmd == WINEING_SHARED_CMD_SHUTDOWN) {
+      if(t_data.cmd == WINEING_CTRL_CMD_SHUTDOWN) {
         break;
       }
     }
@@ -482,10 +506,10 @@ void* cchan_out_thread(void *_ctx)
   chan *cchan_out;
   chan *cchan_in_mem;
   int read;
-  int t_version = DEFAULTS_SHARED_VERSION;
-  static w_shared t_data = {
-    WINEING_SHARED_CMD_INIT,
-    new char[DEFAULTS_SHARED_DATA_SIZE],
+  int t_version = DEFAULTS_SHARED_VERSION_INIT;
+  static w_ctrl t_data = {
+    WINEING_CTRL_CMD_INIT,
+    new char[WINEING_CTRL_DEFAULT_DATA_SIZE],
     0
   };
   static char buffer[DEFAULTS_CCHAN_BUFFER_SIZE] ;
@@ -515,8 +539,11 @@ void* cchan_out_thread(void *_ctx)
 
   while(1) {
     // Check whether shutdown was requested.
-    t_version = lazy_update_local_if_changed(t_version, &t_data, g_data);
-    if(t_data.cmd == WINEING_SHARED_CMD_SHUTDOWN) {
+    t_version = lazy_update_local_if_changed(t_version,
+                                             &t_data,
+                                             &g_data,
+                                             g_to_t);
+    if(t_data.cmd == WINEING_CTRL_CMD_SHUTDOWN) {
       break;
     }
 

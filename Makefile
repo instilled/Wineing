@@ -111,6 +111,7 @@ LIBDIR                = ext/c
 RESDIR                = src/main/resources
 GENSRCDIR             = $(RESDIR)/protobuf
 GENDIR                = src/gen/c
+CACHE_LINE_SIZE       = $(shell cat /sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size)
 ## Files
 # *.proto files must be declared here in $(GENS). It is
 # expected that they're placed in $(GENSRCDIR). The build will
@@ -161,18 +162,21 @@ gen_PB_OBJS    = $(patsubst $(GENSRCDIR)/%.proto,\
 # There's usually no changes needed below this line.
 
 # Exports DEBUG compiler macro
-DEBUG                 = -ggdb -DDEBUG -DLOG_LEVEL=$(LOG_LEVEL)
+ALL_OPTIONS           = -DLOG_LEVEL=$(LOG_LEVEL) \
+			-DCACHE_LINE_SIZE=$(CACHE_LINE_SIZE)
+DEBUG                 = -ggdb -DDEBUG
+OPTIONS               = -O3
 LIBRARY_PATH          = # -DMYSYMBOL=VAL
 LIBRARIES             = # -lzmq
 DLL_PATH              =
 DLL_IMPORTS           = # -lole32
 
 DEFINES               =
-OPTIONS               = -O3 -DLOG_LEVEL=$(LOG_LEVEL) # excluded from DEBUG target
-INCLUDE_PATH          = -I$(GENDIR) -I$(SRCDIR) -I$(RESDIR)/NxCoreAPI -I-/usr/include
-
+INCLUDE_PATH          = -I$(GENDIR) \
+                        -I$(SRCDIR) \
+                        -I$(RESDIR)/NxCoreAPI
 CFLAGS                = -Wall
-CXXFLAGS              = -Wall 
+CXXFLAGS              = -Wall
 LFLAGS                = -Wall
 
 # See http://www.delorie.com/howto/cygwin/mno-cygwin-howto.html
@@ -185,6 +189,7 @@ CXXEXTRA             = #-mno-cygwin
 # Concat includes
 ALL_INCL              = $(DEFINES) \
                         $(OPTIONS) \
+                        $(ALL_OPTIONS) \
                         $(INCLUDE_PATH)
 # Concat library paths
 ALL_LIBS              = $(LIBRARY_PATH) \
@@ -239,6 +244,7 @@ todo:
 	@ack TODO **
 
 $(exe_WI_NAME): gen $(exe_WI_OBJS)
+	@echo "Setting CACHE_LINE_SIZE to $(CACHE_LINE_SIZE)"
 	$(WCXX) $(ALL_LIBS) $(ALL_INCL) $(exe_WI_LDFLAGS) $(exe_WI_OBJS) $(exe_WI_DLL_PATH) $(exe_WI_DLLS) $(exe_WI_LIBRARY_PATH) $(exe_WI_LIBRARIES) -o $@ 
 
 gen: $(gen_PB_SRCS)
@@ -303,67 +309,3 @@ clean:
 	$(RM) -rf $(BINDIR)/lib
 
 # <<< end 'Build rules'
-
-### Unused:
-# ## nxCoreProtocol buffer compilation
-# nxCoreProto_o_TRGT         = NxCoreProto.o
-# nxCoreProto_o_SRCS         = $(GENDIR)/*.cc
-# nxCoreProto_o_CXXFLAGS     =
-#
-# gen_NxCoreConfigProto_TRGT = nxCoreConfig
-# gen_NxCoreConfigProto_NAME = NxCoreConfigProto
-# gen_NxCoreConfigProto_SRCS = $(GENSRCDIR)/$(gen_NxCoreConfigProto_NAME).proto
-#
-# gen_NxCoreMsgProto_TRGT    = gen_nxCoreMsg
-# gen_NxCoreMsgProto_NAME    = NxCoreMsgProto
-# gen_NxCoreMsgProto_SRCS    = $(GENSRCDIR)/$(gen_NxCoreMsgProto_NAME).proto
-#
-# gen_NxCoreConfig_SRC  = $(GENSRCDIR)/NxCoreConfigProto.proto
-# gen_NxCoreConfig_TRGT = $(GENDIR)/NxCoreConfigProto.pb.cc
-#
-# # ## Rules for gen_* targets
-# # $(gen_NxCoreConfigProto_TRGT):
-# #     $(call fn_genNxCore,$(gen_NxCoreConfigProto_NAME), \
-# #                         $(gen_NxCoreConfigProto_SRCS))
-#
-# # $(gen_NxCoreMsgProto_TRGT):
-# #     $(call fn_genNxCore,$(gen_NxCoreMsgProto_NAME), \
-# #                         $(gen_NxCoreMsgProto_SRCS))
-#
-# # ## fn_genNxCore
-# # # TODO: Does not work with multiple source files!!! Inkokes
-# # # $(PROTOC). $(PROTOC) is only invoked if the source's modification
-# # # time is greater that the output file.  Expects two arguments:
-# # # - basename of the file to be generated (without .proto ending)
-# # # - (relative) path to the file(s)
-# # fn_genNxCore =      @if [ $(2) -nt $(GENDIR)/$(1).pb.cc ]; then \
-# #                     echo "Generating '$(GENDIR)/$(1).pb.cc'..."; \
-# #                     $(PROTOC) -I=$(GENSRCDIR) --cpp_out=$(GENDIR) \
-# #                             $(2); \
-# #             fi
-#
-# ## Rules for compingin protoc generated sources
-# # TODO: Shall we extract -fPIC and -c to something like
-# # $(nxCoreProto_o_CXXFLAGS)? ...I guess not because this is
-# # specific to $@
-# $(nxCoreProto_o_TRGT): $(gent_NxCoreConfigProto_TRGT)
-#       $(CXX) -fPIC -c $(nxCoreProto_o_SRCS)
-# # Try to move binaries to target... we would need to copy headers as well
-# #     for f in $(nxCoreProto_o_SRCS) ; do \
-# #             $(CXX) -fPIC -c -o $(BINDIR)/$$f.pb.cc.o $(GENDIR)/$$f.pb.cc; \
-# #     done
-#
-# foo: foo.o
-#       $(CC) -o $@ $^
-#
-# foo.o: foo.c
-#       $(CC) -o $@ -c $<
-#
-# NxCoreMsgProto: NxCoreMsgProto.pb.o
-#       $(CXX) -shared -o $@ -lprotobuf $^
-#
-# NxCoreMsgProto.pb.o: $(GENDIR)/NxCoreMsgProto.pb.cc
-#       $(CXX) -fPIC -c $<
-#
-# $(GENDIR)/NxCoreMsgProto.pb.cc:
-# #$(gen_NxCoreMsgProto_TRGT)
