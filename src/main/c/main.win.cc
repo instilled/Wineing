@@ -1,5 +1,7 @@
 
-#include "wineing.win.h"
+#include "wineing.h"
+#include <stdlib.h>
+#include <string.h>
 
 void cmd_parse(int, char**, w_conf &);
 

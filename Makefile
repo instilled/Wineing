@@ -138,9 +138,9 @@ TEST_EXES             = $(exe_WI_TEST_NAME)
 # wineing.exe
 exe_WI_NAME            = $(BINDIR)/wineing.exe
 exe_WI_CC_SRCS         =
-exe_WI_CXX_SRCS        = $(SRCDIR)/core/inxcore.win.cc \
+exe_WI_CXX_SRCS        = $(SRCDIR)/core/wininf.win.cc \
                          $(SRCDIR)/core/chan.cc \
-                         $(SRCDIR)/wineing.win.cc \
+                         $(SRCDIR)/wineing.cc \
                          $(SRCDIR)/main.win.cc
 exe_WI_LDFLAGS         =
 exe_WI_WIN_LDFLAGS     = -mconsole \
