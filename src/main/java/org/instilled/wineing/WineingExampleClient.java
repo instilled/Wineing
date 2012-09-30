@@ -14,7 +14,6 @@ import org.apache.commons.cli.PosixParser;
 import org.instilled.wineing.core.ResponseProcessor;
 import org.instilled.wineing.core.WineingRemoteAPI;
 import org.instilled.wineing.core.Worker;
-import org.instilled.wineing.core.ZMQChannel;
 import org.instilled.wineing.gen.WineingCtrlProto.Request;
 import org.instilled.wineing.gen.WineingCtrlProto.Request.Builder;
 import org.instilled.wineing.gen.WineingCtrlProto.Request.Type;
@@ -72,11 +71,11 @@ public class WineingExampleClient
                 public void process(Response r)
                 {
                     log.info(String
-                            .format("Response for %s received [id: %i, type: %s, error text: %s]", //
+                            .format("[DEFAULT] Response for %s received [id: %d, type: %s, error text: %s]", //
                                     Request.Type.START, //
                                     r.getRequestId(), //
                                     r.getType(), //
-                                    r.getErrorText()));
+                                    r.getErrText()));
                 }
             });
 
@@ -87,49 +86,52 @@ public class WineingExampleClient
                 public void process(Response r)
                 {
                     log.info(String
-                            .format("Response for %s received [id: %i, type: %s, error text: %s]", //
+                            .format("Response for %s received [id: %d, type: %s, error text: %s]", //
                                     Request.Type.START, //
                                     r.getRequestId(), //
                                     r.getType(), //
-                                    r.getErrorText()));
+                                    r.getErrText()));
                 }
             });
 
-            api.start(tape, new ResponseProcessor()
+            for (int i = 0; i < 10; i++)
             {
-                @Override
-                public void process(Response r)
+                api.start(tape, new ResponseProcessor()
                 {
-                    log.info(String
-                            .format("Response for %s received [id: %i, type: %s, error text: %s]", //
-                                    Request.Type.SHUTDOWN, //
-                                    r.getRequestId(), //
-                                    r.getType(), //
-                                    r.getErrorText()));
-                }
-            });
+                    @Override
+                    public void process(Response r)
+                    {
+                        log.info(String
+                                .format("Response for %s received [id: %d, type: %s, error text: %s]", //
+                                        Request.Type.START, //
+                                        r.getRequestId(), //
+                                        r.getType(), //
+                                        r.getErrText()));
+                    }
+                });
+            }
 
             // Do some work: see WorkerMarket.java
 
-            // Terminate the appliaction
-            api.shutdown(new ResponseProcessor()
-            {
-                @Override
-                public void process(Response r)
-                {
-                    log.info(String
-                            .format("Response for %s received [id: %i, code %s]", //
-                                    Request.Type.SHUTDOWN, //
-                                    r.getRequestId(), //
-                                    r.getType()));
-
-                    for (Worker worker : client._workers)
-                    {
-                        worker.shutdown();
-                    }
-                    ZMQChannel.destroy();
-                }
-            });
+            // // Terminate the appliaction
+            // api.shutdown(new ResponseProcessor()
+            // {
+            // @Override
+            // public void process(Response r)
+            // {
+            // log.info(String
+            // .format("Response for %s received [id: %d, code %s]", //
+            // Request.Type.SHUTDOWN, //
+            // r.getRequestId(), //
+            // r.getType()));
+            //
+            // for (Worker worker : client._workers)
+            // {
+            // worker.shutdown();
+            // }
+            // ZMQChannel.destroy();
+            // }
+            // });
         }
 
         // Wait a moment for operations to complete

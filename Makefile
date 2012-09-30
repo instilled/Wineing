@@ -107,11 +107,18 @@ LOG_LEVEL             = LOG_ALL
 VERSION               = 0.0.1
 SRCDIR                = src/main/c
 BINDIR                = target/wineing-$(VERSION)
-LIBDIR                = ext/c
 RESDIR                = src/main/resources
+LIBDIR                = ext/c
 GENSRCDIR             = $(RESDIR)/protobuf
 GENDIR                = src/gen/c
+
+TESTSRCDIR            = src/test/c
+TESTBINDIR            = target/wineing-$(VERSION)-test
+TESTRESDIR            = src/test/resources
+
+# Determine cache-line size. lazy.h expects this.
 CACHE_LINE_SIZE       = $(shell cat /sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size)
+
 ## Files
 # *.proto files must be declared here in $(GENS). It is
 # expected that they're placed in $(GENSRCDIR). The build will
@@ -123,16 +130,19 @@ CACHE_LINE_SIZE       = $(shell cat /sys/devices/system/cpu/cpu0/cache/index0/co
 GENS                  = $(GENSRCDIR)/WineingCtrlProto.proto \
                         $(GENSRCDIR)/WineingMarketDataProto.proto
 EXES                  = $(exe_WI_NAME)
+TEST_EXES             = $(exe_WI_TEST_NAME)
 
 ## Executables (targets)
 # wineing.exe
-exe_WI_NAME            = $(BINDIR)/wineing.exe
+exe_WI_NAME            = $(BINDIR)/wineing
 exe_WI_CC_SRCS         =
 exe_WI_CXX_SRCS        = $(SRCDIR)/core/inxcore.cc \
                          $(SRCDIR)/core/chan.cc \
                          $(SRCDIR)/wineing.cc \
                          $(SRCDIR)/main.cc
-exe_WI_LDFLAGS         = -mwindows
+exe_WI_LDFLAGS         =
+exe_WI_WIN_LDFLAGS     = -mwindows \
+                         $(exe_WI_LDFLAGS)
 exe_WI_LIBRARY_PATH    =
 exe_WI_LIBRARIES       = -luuid \
                          -lzmq \
@@ -146,6 +156,16 @@ exe_WI_DLLS            = -lodbc32 \
 exe_WI_OBJS            = $(subst .c,.c.o,$(exe_WI_CC_SRCS)) \
                          $(subst .cc,.cc.o,$(exe_WI_CXX_SRCS)) \
                          $(gen_PB_OBJS)
+
+# test_wineing.exe
+exe_WI_TEST_NAME       = $(TESTBINDIR)/test_wineing
+exe_WI_TEST_CC_SRCS    =
+exe_WI_TEST_CXX_SRCS   = $(TESTSRCDIR)/test_main.cc \
+                         $(SRCDIR)/core/chan.cc
+exe_WI_TEST_OBJS       = $(subst .c,.c.o,$(exe_WI_TEST_CC_SRCS)) \
+                         $(subst .cc,.cc.o,$(exe_WI_TEST_CXX_SRCS)) \
+                         $(gen_PB_OBJS)
+
 
 ## Protobuf
 # Don't touch!
@@ -166,6 +186,8 @@ ALL_OPTIONS           = -DLOG_LEVEL=$(LOG_LEVEL) \
 			-DCACHE_LINE_SIZE=$(CACHE_LINE_SIZE)
 DEBUG                 = -ggdb -DDEBUG
 OPTIONS               = -O3
+TEST_OPTIONS          = -lcheck -lstdc++ -ftest-coverage
+TEST_INCLUDE_PATH     = -I$(TESTSRCDIR)
 LIBRARY_PATH          = # -DMYSYMBOL=VAL
 LIBRARIES             = # -lzmq
 DLL_PATH              =
@@ -191,6 +213,13 @@ ALL_INCL              = $(DEFINES) \
                         $(OPTIONS) \
                         $(ALL_OPTIONS) \
                         $(INCLUDE_PATH)
+
+ALL_TEST_INCL         = $(DEFINES) \
+                        $(ALL_OPTIONS) \
+                        $(INCLUDE_PATH) \
+                        $(TEST_OPTIONS) \
+                        $(TEST_INCLUDE_PATH)
+
 # Concat library paths
 ALL_LIBS              = $(LIBRARY_PATH) \
                         $(LIBRARIES) \
@@ -213,6 +242,15 @@ PROTOC = protoc
 # http://www.gnu.org/savannah-checkouts/gnu/make/manual/html_node/Implicit-Variables.html#Implicit-Variables
 .PHONY: release clean
 
+# In case debug target is invoked, lazily prepend debug arguments to
+# gcc
+debug: CC += $(DUBUG)
+debug: CXX += $(DEBUG)
+debug: WCC += $(DEBUG)
+debug: WCXX += $(DEBUG)
+debug: OPTIONS = -O0
+debug: release run-tests
+
 # Shall we define our own SUFFIXES? Would result in shorter
 # target/prerequisite rules. Personally I prefer being explicit.
 #
@@ -225,27 +263,27 @@ PROTOC = protoc
 #.SECONDARY: %.pb.cc
 #.PRECIOUS: %.pb.cc
 
-# In case debug target is invoked, lazily prepend debug arguments to
-# gcc
-debug: CC += $(DUBUG)
-debug: CXX += $(DEBUG)
-debug: WCC += $(DEBUG)
-debug: WCXX += $(DEBUG)
-debug: OPTIONS = -O0
-debug: release
-
 release: dirs $(EXES) libs
 
-// TODO: test target not yet implemented
-test: debug
-	@echo "Implement me..."
+
+test: dirs $(TEST_EXES)
+
+run-tests: test
+	cd $(TESTBINDIR)
+	./$(exe_WI_TEST_NAME)
+
+cache_line:
+	@echo "Setting CACHE_LINE_SIZE to $(CACHE_LINE_SIZE)"
+
+$(exe_WI_TEST_NAME): gen cache_line $(exe_WI_TEST_OBJS)
+	$(CXX) $(ALL_LIBS) $(ALL_TEST_INCL) $(exe_WI_LDFLAGS) $(exe_WI_TEST_OBJS) $(exe_WI_LIBRARY_PATH) $(exe_WI_LIBRARIES) -o $@
+
 
 todo:
 	@ack TODO **
 
-$(exe_WI_NAME): gen $(exe_WI_OBJS)
-	@echo "Setting CACHE_LINE_SIZE to $(CACHE_LINE_SIZE)"
-	$(WCXX) $(ALL_LIBS) $(ALL_INCL) $(exe_WI_LDFLAGS) $(exe_WI_OBJS) $(exe_WI_DLL_PATH) $(exe_WI_DLLS) $(exe_WI_LIBRARY_PATH) $(exe_WI_LIBRARIES) -o $@ 
+$(exe_WI_NAME): gen cache_line $(exe_WI_OBJS)
+	$(WCXX) $(ALL_LIBS) $(ALL_INCL) $(exe_WI_WIN_LDFLAGS) $(exe_WI_OBJS) $(exe_WI_DLL_PATH) $(exe_WI_DLLS) $(exe_WI_LIBRARY_PATH) $(exe_WI_LIBRARIES) -o $@ 
 
 gen: $(gen_PB_SRCS)
 
@@ -255,6 +293,7 @@ libs:
 
 dirs:
 	mkdir -p $(BINDIR)
+	mkdir -p $(TESTBINDIR)
 	mkdir -p $(GENDIR)
 
 # Default c/cc targets
@@ -302,10 +341,9 @@ $(GENDIR)/%.cc:
 
 # Rules for cleaning
 clean:
-	$(RM) $(SRCDIR)/*.o
-	$(RM) $(BINDIR)/*.exe $(BINDIR)/*.so
-	$(RM) $(GENDIR)/*.cc $(GENDIR)/*.h $(GENDIR)/*.o
+	$(RM) $(gen_PB_SRCS) $(gen_PB_OBJS)
 	$(RM) $(exe_WI_OBJS)
-	$(RM) -rf $(BINDIR)/lib
-
+	$(RM) -rf $(BINDIR)/
+	$(RM) $(exe_WI_TEST_OBJS)
+	$(RM) -rf $(TESTBINDIR)/
 # <<< end 'Build rules'

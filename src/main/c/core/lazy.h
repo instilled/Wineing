@@ -2,6 +2,7 @@
 #define _LAZY_H
 
 #include <string.h>
+#include <pthread.h>
 
 /*
   Optimized functions for accessing data shared among threads. The
@@ -72,7 +73,7 @@ static pthread_mutex_t    g_lock;
  * Initializes the global version to a user defined value. Defaults to
  * to <tt>0</tt>.
  */
-void lazy_init(int initial_version = 0)
+inline void lazy_init(int initial_version = 0)
 {
   g_version.version = initial_version;
   pthread_mutex_init(&g_lock, NULL);
@@ -81,7 +82,7 @@ void lazy_init(int initial_version = 0)
 /**
  * Frees resources.
  */
-void lazy_destroy()
+inline void lazy_destroy()
 {
   pthread_mutex_destroy(&g_lock);
 }

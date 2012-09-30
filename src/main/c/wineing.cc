@@ -54,7 +54,7 @@ static w_ctx g_ctx;
  * but also to exchange other data. To assure each thread sees the
  * correct values it is required to follow a few rules:
  *
- * 1) to update the value use *update_gloabl_if_owner*
+ * 1) to update the value use *lazy_update_gloabl_if_owner*
  * 2) to read the value only with *lazy_update_local_if_changed*
  *
  * There's a plethora of details on the topic in lazy.h
@@ -163,7 +163,7 @@ int _recv_ctrl(void *data, size_t size, void *obj)
  */
 void _send_free(void *buffer, void *hint)
 {
-  delete (char*)buffer;
+  delete [] (char*)buffer;
 }
 
 static inline void t_to_g (const void *t, void *g)
@@ -197,15 +197,13 @@ void* cchan_in_thread(void *_ctx)
   using namespace WineingCtrlProto;
 
   w_ctx *ctx = (w_ctx *)_ctx;
-  chan *cchan_out_mem;
+  chan *ichan_out;
   chan *cchan_in;
+  char *buffer;
   // Statically allocate variables to improve runtime performance
   static Request req;
   static Response res;
-  static std::stringstream err;
-  static std::stringstream tape;
-  static char buffer[DEFAULTS_CCHAN_BUFFER_SIZE];
-  static int t_version = DEFAULTS_SHARED_VERSION_INIT;
+    static int t_version = DEFAULTS_SHARED_VERSION_INIT;
   static w_ctrl t_data = {
     WINEING_CTRL_CMD_INIT,
     new char[WINEING_CTRL_DEFAULT_DATA_SIZE],
@@ -225,8 +223,8 @@ void* cchan_in_thread(void *_ctx)
   }
 
   // We can not bind to the inproc channel unless it's been created.
-  cchan_out_mem = chan_init(WINEING_INPROC_CCHAN_OUT, CHAN_TYPE_PUSH_CONNECT);
-  while(0 > chan_bind(cchan_out_mem)) {
+  ichan_out = chan_init(DEFAULTS_ICHAN_NAME, CHAN_TYPE_PUSH_CONNECT);
+  while(0 > chan_bind(ichan_out)) {
     sleep(1);
   }
 
@@ -234,13 +232,13 @@ void* cchan_in_thread(void *_ctx)
 
   int running = 1;
   while (running) {
+    std::stringstream err;
+    std::stringstream tape;
 
     // Clear all objects (they're statically allocated and the data
     // needs to be cleared)
     req.Clear();
     res.Clear();
-    err.clear();
-    tape.clear();
 
     // Receive data
     int rc = chan_recv(cchan_in, _recv_ctrl, &req);
@@ -249,7 +247,7 @@ void* cchan_in_thread(void *_ctx)
         req.requestid(),
         req.type());
 
-    if(rc == 1) {
+    if(rc > 0) {
 
       // Assume we will respond with an OK. Response::ERR is only set
       // in case one happens
@@ -270,7 +268,6 @@ void* cchan_in_thread(void *_ctx)
           }
 
           t_data.size = 0;
-          t_data.data = NULL;
 
           // If the tape file is empty or NULL NnXcore will start
           // streaming real-time data. Make sure NxCoreAccess is
@@ -294,7 +291,7 @@ void* cchan_in_thread(void *_ctx)
             }
 
             // String length plus NULL byte
-            t_data.size = tape.str().length()+1;
+            t_data.size = tape.str().length() + 1;
             memcpy(t_data.data,
                    tape.str().c_str(),
                    t_data.size);
@@ -330,19 +327,25 @@ void* cchan_in_thread(void *_ctx)
           break;
         }
 
-      google::protobuf::io::ArrayOutputStream os (buffer, 2048);
+      int buf_size = res.ByteSize();
+      buffer = new char[buf_size];
+      google::protobuf::io::ArrayOutputStream os (buffer, buf_size);
       res.SerializeToZeroCopyStream(&os);
-      if(chan_send(cchan_out_mem, buffer, res.ByteSize()) < 0) {
+      log(LOG_DEBUG, "Sending Response [id: %li, type: %i]",
+          res.requestid(),
+          res.type()
+          );
+      if(0 > chan_send(ichan_out, buffer, buf_size, _send_free)) {
         log(LOG_WARN,
             "Failed sending message to inproc channel (%s). Error %s",
-            WINEING_INPROC_CCHAN_OUT,
+            DEFAULTS_ICHAN_NAME,
             chan_error());
       }
     }
   }
 
   chan_destroy(cchan_in);
-  chan_destroy(cchan_out_mem);
+  chan_destroy(ichan_out);
 
   return NULL;
 }
@@ -356,9 +359,6 @@ int __stdcall processTape(const NxCoreSystem *pNxCoreSys, \
 {
   using namespace WineingMarketDataProto;
 
-  // Use static vars to avoid reinitialization. This is potentially
-  // risky if the UserData (mchan) changes. We know that Winieng never
-  // reallocates a new chan structure during its lifetime.
   static MarketData m;
   static int t_version = DEFAULTS_SHARED_VERSION_INIT;
   static w_ctrl t_data = {
@@ -374,6 +374,13 @@ int __stdcall processTape(const NxCoreSystem *pNxCoreSys, \
 
   // Because we reuse protobuf objects we have to clear them
   m.Clear();
+
+  // TODO: we need to pre-allocate a batch of buffers (ring buffer?)
+  // this is required because we don't know when zmq has released an
+  // underlying buffer. we could use *hint as a callback but then
+  // again would require a thread safe ring-buffer or whatever data
+  // structre we use.
+
   /*
   switch( pNxCoreMsg->MessageType )
     {
@@ -408,8 +415,6 @@ int __stdcall processTape(const NxCoreSystem *pNxCoreSys, \
     }
 */
 
-  // An unsynchronized read on a shared variable. We don't care about
-  // the value being delayed. The cost of synchronization is too high.
   return NxCALLBACKRETURN_CONTINUE;
 }
 
@@ -419,7 +424,7 @@ int __stdcall processTape(const NxCoreSystem *pNxCoreSys, \
 void* market_thread(void *_ctx)
 {
   w_ctx *ctx = (w_ctx *)_ctx;
-  chan *cchan_out_mem;
+  chan *ichan_out;
   chan *mchan;
   // Thread local version of the shared state
   static int t_version = DEFAULTS_SHARED_VERSION_INIT;
@@ -440,8 +445,8 @@ void* market_thread(void *_ctx)
     return NULL;
   }
 
-  cchan_out_mem = chan_init(ctx->conf->mchan_fqcn, CHAN_TYPE_PUB);
-  while(chan_bind(cchan_out_mem) < 0) {
+  ichan_out = chan_init(ctx->conf->mchan_fqcn, CHAN_TYPE_PUB);
+  while(chan_bind(ichan_out) < 0) {
     sleep(1);
   }
 
@@ -475,25 +480,16 @@ void* market_thread(void *_ctx)
     }
   }
   chan_destroy(mchan);
-  chan_destroy(cchan_out_mem);
+  chan_destroy(ichan_out);
 
   return NULL;
 }
 
 /**
- * Used by cchan_out_thread
- */
-void _cchan_out_send_free(void *buffer, void *hint)
-{
-  delete [] (char*)buffer;
-}
-
-/**
  * Used by cchan_out_thread. Allocates a buffer of size *size*.
  */
-int _cchan_out_mem_in_copy(void *buffer, size_t size, void *out_buffer)
+int _ichan_out_in_copy(void *buffer, size_t size, void *out_buffer)
 {
-  out_buffer = new char[size];
   memcpy(out_buffer, buffer, size);
   return 0;
 }
@@ -512,10 +508,12 @@ void* cchan_out_thread(void *_ctx)
     new char[WINEING_CTRL_DEFAULT_DATA_SIZE],
     0
   };
-  static char buffer[DEFAULTS_CCHAN_BUFFER_SIZE] ;
+  char *buffer;
 
   log(LOG_INFO, "Initializing cchan_out thread (%s)",
       ctx->conf->cchan_out_fqcn);
+
+  log(LOG_WARN, "TODO: CCHAN_OUT in-mem channel buffer size is 1024.");
 
   // This is where we send Response messages to the
   // client(s). ZMQ_PUSH is a fan-out type socket.
@@ -529,10 +527,10 @@ void* cchan_out_thread(void *_ctx)
 
   // This initializes the inbound memory channel where we get Response
   // messages required to be sent to the client.
-  cchan_in_mem = chan_init(WINEING_INPROC_CCHAN_OUT, CHAN_TYPE_PULL_BIND);
+  cchan_in_mem = chan_init(DEFAULTS_ICHAN_NAME, CHAN_TYPE_PULL_BIND);
   if(0 > chan_bind(cchan_in_mem)) {
     log(LOG_ERROR, "Failed binding to cchan_in_mem (%s). Error [%s]",
-        WINEING_INPROC_CCHAN_OUT,
+        DEFAULTS_ICHAN_NAME,
         chan_error());
     return NULL;
   }
@@ -547,24 +545,26 @@ void* cchan_out_thread(void *_ctx)
       break;
     }
 
-    // Allocation and freeing of buffer happen in _mem_in_ccha. It
-    // will be freed by chan_send.
+    // Allocate buffer and receive the data. The buffer is freed in
+    // _cchan_out_send_free (invoked by chan_send as soon as the data
+    // is on the wire.
+    buffer = new char[1024];
     read = chan_recv(cchan_in_mem,
-                     _cchan_out_mem_in_copy,
+                     _ichan_out_in_copy,
                      buffer);
     if(0 > read) {
       log(LOG_WARN,
           "Failed reading message from inproc channel (%s). Error %s",
-          WINEING_INPROC_CCHAN_OUT,
+          DEFAULTS_ICHAN_NAME,
           chan_error());
       continue;
     }
 
-    // Sends the data and frees the buffer
+    // Send the data
     read = chan_send(cchan_out,
-                     buffer,
-                     read,
-                     _cchan_out_send_free);
+                      buffer,
+                      read,
+                     _send_free);
     if(0 > read) {
       log(LOG_WARN, "Sending control message failed. Error %s",
           chan_error());

@@ -120,14 +120,13 @@ inline int chan_recv(chan *c, chan_recvFn fn, void *obj)
   return read;
 }
 
-inline int chan_send(chan *c,                              \
-                     void *buffer,                         \
-                     size_t size,                          \
-                     chan_sendFreeFn freeFn = 0)
+inline int chan_send(chan *c,
+                     void *buffer,
+                     size_t size,
+                     chan_sendFreeFn freeFn = NULL)
 {
   zmq_msg_t out;
-  void *hint = 0;
-  zmq_msg_init_data(&out, buffer, size, freeFn, hint);
+  zmq_msg_init_data(&out, buffer, size, freeFn, NULL);
   return zmq_send (c->sock, &out, 0);
 }
 

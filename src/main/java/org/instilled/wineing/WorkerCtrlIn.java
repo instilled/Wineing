@@ -51,6 +51,8 @@ public class WorkerCtrlIn implements Worker
     @Override
     public void run()
     {
+        _running = true;
+
         // Start incoming channel. Listens to replies from
         // Wineing
         ZMQChannel cchan_in = new ZMQChannel(_cchanIn,
@@ -62,10 +64,16 @@ public class WorkerCtrlIn implements Worker
             Response res;
             try
             {
-                byte[] receive = cchan_in.receive();
-                res = Response.parseFrom(receive);
+                byte[] buffer = cchan_in.receive();
+                res = Response.parseFrom(buffer);
                 processResponse(res);
 
+                try
+                {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e)
+                {
+                }
             } catch (InvalidProtocolBufferException e)
             {
                 throw new IllegalStateException(

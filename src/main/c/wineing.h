@@ -10,6 +10,7 @@
 #define DEFAULTS_CCHAN_IN_NAME            "tcp://*:9990"
 #define DEFAULTS_CCHAN_OUT_NAME           "tcp://*:9991"
 #define DEFAULTS_MCHAN_NAME               "tcp://*:9992"
+#define DEFAULTS_ICHAN_NAME               "inproc://ctrl.out"
 #define DEFAULTS_TAPE_BASE_DIR            "C:\\md\\"
 #define DEFAULTS_SHARED_VERSION_INIT     -1
 #define DEFAULTS_CCHAN_BUFFER_SIZE        2048
@@ -23,7 +24,6 @@
 
 // The channel response/notification messages
 // are sent to cchan_out_thread
-#define WINEING_INPROC_CCHAN_OUT          "inproc://ctrl.out"
 
 /**
  * \struct
