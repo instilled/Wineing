@@ -1,6 +1,6 @@
 
 
-#include "inxcore.h"
+#include "inxcore.win.h"
 #include "logging/logging.h"
 
 #include <stdio.h>

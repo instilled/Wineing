@@ -38,8 +38,10 @@ START_TEST (test_UpdateGlobalFailsIfNotOwner)
                                          &g_data,
                                          t_to_g);
 
-    fail_unless (t_version + 1 == actual, NULL);
-
+    // If update succeeds t_version woulb be incremented by
+    // one, that is -1 + 1 = 0 is != to 2 (because we initialized
+    // with 2 lazy_init
+    fail_unless (t_version + 1 != actual, NULL);
     fail_unless ('a' == g_data.data);
     fail_unless (2 == actual);
   }

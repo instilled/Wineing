@@ -1,5 +1,5 @@
 
-#include "wineing.h"
+#include "wineing.win.h"
 
 void cmd_parse(int, char**, w_conf &);
 

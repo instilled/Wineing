@@ -2,7 +2,7 @@
 #ifndef _WINEING_H
 #define _WINEING_H
 
-#include "core/inxcore.h"
+#include "core/inxcore.win.h"
 #include "logging/logging.h"
 
 

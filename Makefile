@@ -64,6 +64,8 @@
 # Book on autoconf tools (not so bad):
 # http://sources.redhat.com/autobook/
 #
+# http://www.winehq.org/docs/winedev-guide/x2800
+#
 # To list make database 'make -pn'. This prints a bunch of useful
 # information.
 #
@@ -134,14 +136,14 @@ TEST_EXES             = $(exe_WI_TEST_NAME)
 
 ## Executables (targets)
 # wineing.exe
-exe_WI_NAME            = $(BINDIR)/wineing
+exe_WI_NAME            = $(BINDIR)/wineing.exe
 exe_WI_CC_SRCS         =
-exe_WI_CXX_SRCS        = $(SRCDIR)/core/inxcore.cc \
+exe_WI_CXX_SRCS        = $(SRCDIR)/core/inxcore.win.cc \
                          $(SRCDIR)/core/chan.cc \
-                         $(SRCDIR)/wineing.cc \
-                         $(SRCDIR)/main.cc
+                         $(SRCDIR)/wineing.win.cc \
+                         $(SRCDIR)/main.win.cc
 exe_WI_LDFLAGS         =
-exe_WI_WIN_LDFLAGS     = -mwindows \
+exe_WI_WIN_LDFLAGS     = -mconsole \
                          $(exe_WI_LDFLAGS)
 exe_WI_LIBRARY_PATH    =
 exe_WI_LIBRARIES       = -luuid \
@@ -149,7 +151,7 @@ exe_WI_LIBRARIES       = -luuid \
                          -lprotobuf \
                          -lpthread
 exe_WI_DLL_PATH        =
-exe_WI_DLLS            = -lodbc32 \
+exe_WI_DLLS            = #-lodbc32 \
                          -lole32 \
                          -lwinspool \
                          -lodbccp32
@@ -265,8 +267,10 @@ debug: release run-tests
 
 release: dirs $(EXES) libs
 
-
 test: dirs $(TEST_EXES)
+
+todo:
+	@ack TODO **
 
 run-tests: test
 	cd $(TESTBINDIR)
@@ -275,12 +279,9 @@ run-tests: test
 cache_line:
 	@echo "Setting CACHE_LINE_SIZE to $(CACHE_LINE_SIZE)"
 
+
 $(exe_WI_TEST_NAME): gen cache_line $(exe_WI_TEST_OBJS)
 	$(CXX) $(ALL_LIBS) $(ALL_TEST_INCL) $(exe_WI_LDFLAGS) $(exe_WI_TEST_OBJS) $(exe_WI_LIBRARY_PATH) $(exe_WI_LIBRARIES) -o $@
-
-
-todo:
-	@ack TODO **
 
 $(exe_WI_NAME): gen cache_line $(exe_WI_OBJS)
 	$(WCXX) $(ALL_LIBS) $(ALL_INCL) $(exe_WI_WIN_LDFLAGS) $(exe_WI_OBJS) $(exe_WI_DLL_PATH) $(exe_WI_DLLS) $(exe_WI_LIBRARY_PATH) $(exe_WI_LIBRARIES) -o $@ 
@@ -298,20 +299,20 @@ dirs:
 
 # Default c/cc targets
 %.c.o: %.c
-	$(WCC) $(CFLAGS) $(CEXTRA) $(ALL_INCL) -o $@ -c $<
+	$(CC) $(CFLAGS) $(CEXTRA) $(ALL_INCL) -o $@ -c $<
 
 %.cc.o: %.cc
-	$(WCXX) $(CXXFLAGS) $(CXXEXTRA) $(ALL_INCL) -fPIC -o $@ -c $<
+	$(CXX) $(CXXFLAGS) $(CXXEXTRA) $(ALL_INCL) -fPIC -o $@ -c $<
 
 # We introduce windows specific targets (by convention files ending in
 # .win.(c|cc) will be compiled with winegcc or wineg++ respectively.
 # Following this convention circumvents writing specific targets for
 # each file that needs to be compiled withe either winegcc or wineg++.
-#%.c.o: %.win.c
-#	$(WCC) $(CFLAGS) $(CEXTRA) $(ALL_INCL) -o $@ -c $<
+%.win.c.o: %.win.c
+	$(WCC) $(CFLAGS) $(CEXTRA) $(ALL_INCL) -o $@ -c $<
 
-#%.cc.o: %.win.cc
-#	$(WCXX) $(CXXFLAGS) $(CXXEXTRA) $(ALL_INCL) -o $@ -c $<
+%.win.cc.o: %.win.cc
+	$(WCXX) $(CXXFLAGS) $(CXXEXTRA) $(ALL_INCL) -o $@ -c $<
 
 # It is not possible to use wildcards (automatic variables in make
 # jargon) but in the recipe. They're illegal in the target and
