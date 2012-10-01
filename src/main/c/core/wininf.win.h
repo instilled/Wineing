@@ -1,6 +1,8 @@
 #ifndef _WININF_H
 #define _WININF_H
 
+#include "chan.h"
+
 /*
   Dependencies to NxCore and other windows stuff has been removed from
   the header because we would like to test wineing.cc without the
@@ -11,27 +13,13 @@
   The consequence is that we will need to implement the callback and
   its behaviour in wininf.win.cc.
  */
-struct NxCoreSystem;
-struct NxCoreMessage;
 
-#ifdef __WINE__
-#define STDCALL __stdcall
-#else
-#define STDCALL
-#endif
+int wininf_nxcore_load();
 
-typedef int STDCALL (*wininf_nxcore_callback)(const NxCoreSystem* pNxCoreSys,
-                                               const NxCoreMessage* pNxCoreMsg);
+int  wininf_nxcore_run(chan *cchan_out, chan *mchan, char *tape);
 
-void* wininf_nxcore_load();
+void  wininf_nxcore_free();
 
-void  wininf_nxcore_run(void* hLib,
-                 wininf_nxcore_callback callback,
-                 char *tape,
-                 void *usrdata);
-
-void  wininf_nxcore_free(void* hLib);
-
-int   wininf_file_exists(const char *path);
+int wininf_file_exists(const char *path);
 
 #endif /* _INXCORE_H */

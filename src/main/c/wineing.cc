@@ -41,20 +41,6 @@
 #include "core/lazy.h"
 
 /**
- * The application context. Its access is unsyncronized and
- * unprotected. The variable is being written only in *wineing_init*
- * before any thread is created. Thus it's ok. Unfortunately I have to
- * use a global variable because of NxCoreSystem.UserData's design -
- * its an INT! The documentation says is can be used to share user
- * provided value and also pointers with the callback. Indeed it
- * is. But as its size is of type int and pointers on 64-bit
- * architectures use, well, 64 instead of 32 bits the pointer is
- * invalid! They should have used size_t instead, which would point to
- * int on 32-bit and to long on 64-bit machines
- */
-static w_ctx g_ctx;
-
-/**
  * Data shared among threads. This is mainly for signalling purposes
  * but also to exchange other data. To assure each thread sees the
  * correct values it is required to follow a few rules:
@@ -81,10 +67,6 @@ void wineing_init(w_ctx &ctx)
 {
   log(LOG_INFO, "Initializing wineing");
 
-  // The global context is used only because of the nxcore
-  // callback. See comments above.
-  g_ctx = ctx;
-
   lazy_init();
 
   // Verify the version of the library we linked against is compatible
@@ -92,8 +74,7 @@ void wineing_init(w_ctx &ctx)
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
   // Load the nxcore dll.
-  ctx.nxCoreLib = wininf_nxcore_load();
-  if(!ctx.nxCoreLib) {
+  if(0 > wininf_nxcore_load()) {
     log(LOG_ERROR, "Failed loading NxCore dll");
     exit(1);
   }
@@ -132,7 +113,7 @@ void wineing_shutdown(w_ctx &ctx)
   pthread_cond_destroy(&g_market_sync_cond);
   pthread_mutex_destroy(&g_market_sync_mutex);
 
-  wininf_nxcore_free(ctx.nxCoreLib);
+  wininf_nxcore_free();
 
   // Free any protobuf specific resources
   google::protobuf::ShutdownProtobufLibrary();
@@ -354,82 +335,13 @@ void* cchan_in_thread(void *_ctx)
 }
 
 /**
- * Prcesses each market data update from NxCore sends it through a ZMQ
- * channel to the client.
- */
-int STDCALL processTape(const NxCoreSystem *pNxCoreSys,
-              const NxCoreMessage *pNxCoreMsg)
-{
-  // using namespace WineingMarketDataProto;
-
-  // static MarketData m;
-  // static int t_version = DEFAULTS_SHARED_VERSION_INIT;
-  // static w_ctrl t_data = {
-  //   WINEING_CTRL_CMD_INIT,
-  //   new char[WINEING_CTRL_DEFAULT_DATA_SIZE],
-  //   0
-  // };
-
-  // t_version = lazy_update_local_if_changed(t_version,
-  //                                          &t_data,
-  //                                          &g_data,
-  //                                          g_to_t);
-
-  // // Because we reuse protobuf objects we have to clear them
-  // m.Clear();
-
-  // TODO: we need to pre-allocate a batch of buffers (ring buffer?)
-  // this is required because we don't know when zmq has released an
-  // underlying buffer. we could use *hint as a callback but then
-  // again would require a thread safe ring-buffer or whatever data
-  // structre we use.
-
-  /*
-  switch( pNxCoreMsg->MessageType )
-    {
-    case NxMSG_STATUS:
-      m.set_type(MarketData::STATUS);
-      chan_send_market(ctx.mchan, m);
-      break;
-
-    case NxMSG_EXGQUOTE:
-      m.set_type(MarketData::QUOTE_EX);
-      chan_send_market(ctx.mchan, m);
-      break;
-
-    case NxMSG_MMQUOTE:
-      m.set_type(MarketData::QUOTE_EX);
-      chan_send_market(ctx.mchan, m);
-      break;
-
-    case NxMSG_TRADE:
-      m.set_type(MarketData::QUOTE_EX);
-      chan_send_market(ctx.mchan, m);
-      break;
-
-    case NxMSG_CATEGORY:
-      m.set_type(MarketData::QUOTE_EX);
-      chan_send_market(ctx.mchan, m);
-      break;
-      //case NxMSG_SYMBOLCHANGE:
-      //break;
-      //case NxMSG_SYMBOLSPIN:
-      //break;
-    }
-*/
-
-  //return NxCALLBACKRETURN_CONTINUE;
-  return 0;
-}
-
-/**
  * The thread processing NxCore messages.
  */
 void* market_thread(void *_ctx)
 {
   w_ctx *ctx = (w_ctx *)_ctx;
-  chan *ichan_out;
   chan *mchan;
+  chan *ichan_out;
   // Thread local version of the shared state
   static int t_version = DEFAULTS_SHARED_VERSION_INIT;
   static w_ctrl t_data = {
@@ -449,8 +361,9 @@ void* market_thread(void *_ctx)
     return NULL;
   }
 
-  ichan_out = chan_init(ctx->conf->mchan_fqcn, CHAN_TYPE_PUB);
-  while(chan_bind(ichan_out) < 0) {
+  // We can not bind to the inproc channel unless it's been created.
+  ichan_out = chan_init(DEFAULTS_ICHAN_NAME, CHAN_TYPE_PUSH_CONNECT);
+  while(0 > chan_bind(ichan_out)) {
     sleep(1);
   }
 
@@ -474,7 +387,7 @@ void* market_thread(void *_ctx)
 
       if(t_data.cmd == WINEING_CTRL_CMD_MARKET_RUN) {
         log(LOG_DEBUG, " ... running nxcore");
-        wininf_nxcore_run(ctx->nxCoreLib, processTape, NULL, NULL);
+        wininf_nxcore_run(ichan_out, mchan, t_data.data);
       }
 
       // Loop as long as no shutdown is requested (g_msg.ctrl == 0)

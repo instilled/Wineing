@@ -5,49 +5,44 @@
 #include <stdio.h>
 
 #include "NxCoreAPI.h"
-
 #include "logging/logging.h"
+#include "myProcessTape.h"
 
-void * wininf_nxcore_load()
+static HINSTANCE g_hlib;
+
+int wininf_nxcore_load()
 {
   log(LOG_DEBUG, "Loading NxCoreAPI64.dll");
-  HINSTANCE hLib = ::LoadLibrary("lib/NxCoreAPI64.dll");
+  g_hlib = ::LoadLibrary("lib/NxCoreAPI64.dll");
 
-  if(!hLib) {
+  if(!g_hlib) {
     log(LOG_ERROR,
         "Failed loading NxCoreAPI64.dll. Reason %d",
         GetLastError());
-    return NULL;
+    return -1;
   }
 
-  return (void*)hLib;
+  return 0;
 }
 
-void wininf_nxcore_run(void *hLib,
-                 wininf_nxcore_callback callback,
-                 char *tape,
-                 void *usrdata)
+int wininf_nxcore_run(chan *cchan_out, chan *mchan, char *tape)
 {
   NxCoreProcessTape pTapeProc =
-    (NxCoreProcessTape) ::GetProcAddress((HINSTANCE)hLib,"sNxCoreProcessTape");
+    (NxCoreProcessTape) ::GetProcAddress(g_hlib, "sNxCoreProcessTape");
   if(!pTapeProc) {
     log(LOG_ERROR, "Failed loading NxCoreProcessTape function");
-    return;
+    return -1;
   }
 
-  pTapeProc(tape, 0, 0, 0, callback);
-  /*
-    pfNxProcessTape("C:\\md\\201005\\20100506.DQ.nxc",  \
-    0,                                                  \
-    NxCF_EXCLUDE_CRC_CHECK,                             \
-    123,                                                \
-    nxCoreCallback);
-  */
+  myProcessTape_init(cchan_out, mchan);
+  pTapeProc(tape, 0, 0, 0, myProcessTape);
+
+  return 0;
 }
 
-void wininf_nxcore_free(void *nxCoreLib)
+void wininf_nxcore_free()
 {
-  ::FreeLibrary((HINSTANCE)nxCoreLib);
+  ::FreeLibrary(g_hlib);
 }
 
 int wininf_file_exists(const char *str)
