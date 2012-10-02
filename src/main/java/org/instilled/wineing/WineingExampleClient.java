@@ -14,6 +14,7 @@ import org.apache.commons.cli.PosixParser;
 import org.instilled.wineing.core.ResponseProcessor;
 import org.instilled.wineing.core.WineingRemoteAPI;
 import org.instilled.wineing.core.Worker;
+import org.instilled.wineing.core.ZMQChannel;
 import org.instilled.wineing.gen.WineingCtrlProto.Request;
 import org.instilled.wineing.gen.WineingCtrlProto.Request.Builder;
 import org.instilled.wineing.gen.WineingCtrlProto.Request.Type;
@@ -42,6 +43,17 @@ public class WineingExampleClient
 
     public static void main(String[] args)
     {
+        // Shutdown hook
+        Runtime.getRuntime().addShutdownHook(new Thread()
+        {
+            @Override
+            public void run()
+            {
+                log.debug("Shutting down "
+                        + WineingExampleClient.class.getSimpleName());
+            }
+        });
+
         // Command line stuff
         CommandLine cmd = parseCMDLine(args);
         String cchan_in = cmd.getOptionValue("cchan-in");
@@ -72,27 +84,15 @@ public class WineingExampleClient
                 {
                     log.info(String
                             .format("[DEFAULT] Response for %s received [id: %d, type: %s, error text: %s]", //
-                                    Request.Type.START, //
+                                    Request.Type.MARKET_START, //
                                     r.getRequestId(), //
                                     r.getType(), //
                                     r.getErrText()));
                 }
             });
 
-            // Requests tape
-            api.start(tape, new ResponseProcessor()
-            {
-                @Override
-                public void process(Response r)
-                {
-                    log.info(String
-                            .format("Response for %s received [id: %d, type: %s, error text: %s]", //
-                                    Request.Type.START, //
-                                    r.getRequestId(), //
-                                    r.getType(), //
-                                    r.getErrText()));
-                }
-            });
+            // Requests tape (use default RequestProcessor)
+            api.start(tape, null);
 
             for (int i = 0; i < 10; i++)
             {
@@ -103,7 +103,7 @@ public class WineingExampleClient
                     {
                         log.info(String
                                 .format("Response for %s received [id: %d, type: %s, error text: %s]", //
-                                        Request.Type.START, //
+                                        Request.Type.MARKET_START, //
                                         r.getRequestId(), //
                                         r.getType(), //
                                         r.getErrText()));
@@ -112,48 +112,37 @@ public class WineingExampleClient
             }
 
             // Do some work: see WorkerMarket.java
-
-            // // Terminate the appliaction
-            // api.shutdown(new ResponseProcessor()
-            // {
-            // @Override
-            // public void process(Response r)
-            // {
-            // log.info(String
-            // .format("Response for %s received [id: %d, code %s]", //
-            // Request.Type.SHUTDOWN, //
-            // r.getRequestId(), //
-            // r.getType()));
-            //
-            // for (Worker worker : client._workers)
-            // {
-            // worker.shutdown();
-            // }
-            // ZMQChannel.destroy();
-            // }
-            // });
-        }
-
-        // Wait a moment for operations to complete
-        try
-        {
-            Thread.sleep(10000);
-        } catch (InterruptedException e)
-        {
-        }
-
-        client.shutdown();
-
-        // Shutdown hook
-        Runtime.getRuntime().addShutdownHook(new Thread()
-        {
-            @Override
-            public void run()
+            try
             {
-                log.debug("Shutting down "
-                        + WineingExampleClient.class.getSimpleName());
+                Thread.sleep(2000);
+            } catch (InterruptedException e)
+            {
             }
-        });
+
+            // Terminate the appliaction
+            api.shutdown(new ResponseProcessor()
+            {
+                @Override
+                public void process(Response r)
+                {
+                    log.info(String
+                            .format("Response for %s received [id: %d, code %s]", //
+                                    Request.Type.SHUTDOWN, //
+                                    r.getRequestId(), //
+                                    r.getType()));
+                }
+            });
+
+            // Wait a few seconds before shutting down the application
+            try
+            {
+                Thread.sleep(1000);
+            } catch (InterruptedException e)
+            {
+            }
+
+            client.shutdown();
+        }
     }
 
     public void init(WineingClientCtx ctx)
@@ -169,29 +158,20 @@ public class WineingExampleClient
         // listen for incoming Response messages sent by Wineing.
         WorkerCtrlIn workerCtrlIn = new WorkerCtrlIn(_ctx.cchan_in);
         _workers.add(workerCtrlIn);
-        Thread worker_ctrl_in = new Thread(workerCtrlIn);
+        Thread worker_ctrl_in = new Thread(workerCtrlIn, "WorkerCtrlIn");
         worker_ctrl_in.start();
-
-        // Give the server time to create the server sockets we connect
-        // to as we might fail to connect to the channels otherwise.
-        // TODO is there a better way to synchronize client and server?
-        try
-        {
-            Thread.sleep(100);
-        } catch (InterruptedException e)
-        {
-        }
 
         // Control thread
         WorkerCtrlOut workerCtrlOut = new WorkerCtrlOut(_ctx.cchan_out);
         _workers.add(workerCtrlOut);
-        Thread worker_ctrl_out = new Thread(workerCtrlOut);
+        Thread worker_ctrl_out = new Thread(workerCtrlOut,
+                "WorkerCtrlOut");
         worker_ctrl_out.start();
 
         // Market thread
         WorkerMarket workerMarket = new WorkerMarket(_ctx.mchan);
         _workers.add(workerMarket);
-        Thread worker_market = new Thread(workerMarket);
+        Thread worker_market = new Thread(workerMarket, "WorkerMarket");
         worker_market.start();
 
         _api = new WineingRemoteAPIImpl(workerCtrlOut, workerCtrlIn);
@@ -199,7 +179,15 @@ public class WineingExampleClient
 
     public void shutdown()
     {
+        for (Worker worker : _workers)
+        {
+            worker.shutdown();
+        }
 
+        // We could use Thread.interrupt() method if ZMQ would not use
+        // non-interruptible (non-native) channels. We thus
+        // close/destroy the context which nearly does the same.
+        ZMQChannel.destroy();
     }
 
     public WineingRemoteAPI api()
@@ -241,14 +229,14 @@ public class WineingExampleClient
         @Override
         public void start(String tapeFile, ResponseProcessor p)
         {
-            Request r = build(Type.START, tapeFile);
+            Request r = build(Type.MARKET_START, tapeFile);
             put(r, p);
         }
 
         @Override
         public void stop(ResponseProcessor p)
         {
-            Request r = build(Type.STOP);
+            Request r = build(Type.MARKET_STOP);
             put(r, p);
         }
 

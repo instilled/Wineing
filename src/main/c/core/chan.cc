@@ -19,7 +19,7 @@ using namespace std;
 /**
  * The thread safe context instance shared among the application.
  */
-void *my_zmq_ctx = zmq_init(1);
+void *my_zmq_ctx = zmq_init(2);
 
 chan* chan_init(const char *fqcn, int type)
 {

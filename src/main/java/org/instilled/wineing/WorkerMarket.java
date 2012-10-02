@@ -6,6 +6,7 @@ import org.instilled.wineing.core.ZMQChannel.ZMQChannelType;
 import org.instilled.wineing.gen.WineingMarketDataProto.MarketData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.zeromq.ZMQException;
 
 import com.google.protobuf.InvalidProtocolBufferException;
 
@@ -31,20 +32,18 @@ public class WorkerMarket implements Worker
     @Override
     public void run()
     {
+        _running = true;
+
+        ZMQChannel market = new ZMQChannel(_mchan, ZMQChannelType.SUB);
+        market.bind();
+
         long count = 0;
         while (_running)
         {
-            ZMQChannel market = new ZMQChannel(_mchan,
-                    ZMQChannelType.SUB);
-            market.bind();
 
             try
             {
                 byte[] buf = market.receive();
-                // if (r < 0) {
-                // log.error("Failed parsing market data message");
-                // continue;
-                // }
 
                 MarketData marketData = MarketData.parseFrom(buf);
 
@@ -58,10 +57,14 @@ public class WorkerMarket implements Worker
                 count++;
             } catch (InvalidProtocolBufferException e)
             {
-                log.error("Failed to parse MarketData message.", e);
+                log.error("Failed to process MarketData message.", e);
+            } catch (ZMQException e)
+            {
+                // Ignore. We expect an exception when shutting down
             }
         }
-
         log.debug("Received " + count + " messages");
+
+        market.close();
     }
 }

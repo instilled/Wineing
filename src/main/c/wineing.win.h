@@ -11,14 +11,15 @@
 #define DEFAULTS_MCHAN_NAME               "tcp://*:9992"
 #define DEFAULTS_ICHAN_NAME               "inproc://ctrl.out"
 #define DEFAULTS_TAPE_BASE_DIR            "C:\\md\\"
-#define DEFAULTS_SHARED_VERSION_INIT     -1
+#define DEFAULTS_SHARED_VERSION_INIT      0
+#define DEFAULTS_SHARED_VERSION_READ_INIT -1
 #define DEFAULTS_CCHAN_BUFFER_SIZE        2048
 
 // Values for w_ctrl.cmd
-#define WINEING_CTRL_CMD_INIT             0
-#define WINEING_CTRL_CMD_SHUTDOWN         1
-#define WINEING_CTRL_CMD_MARKET_STOP      2
-#define WINEING_CTRL_CMD_MARKET_RUN       3
+#define WINEING_CTRL_CMD_INIT             3
+#define WINEING_CTRL_CMD_MARKET_RUN       2
+#define WINEING_CTRL_CMD_MARKET_STOP      1
+#define WINEING_CTRL_CMD_SHUTDOWN         0
 #define WINEING_CTRL_DEFAULT_DATA_SIZE    1024
 
 // The channel response/notification messages
@@ -49,11 +50,13 @@ typedef struct
   w_conf *conf;
 } w_ctx;
 
+// http://www.drdobbs.com/parallel/volatile-vs-volatile/212701484
+// see http://stackoverflow.com/questions/2044565/volatile-struct-semantics
 typedef struct
 {
-  int cmd;       // the command
-  char *data;    // data buffer
-  size_t size;   // data buffer's size
+  int volatile cmd;       // the command
+  char * volatile data;    // data buffer
+  size_t volatile size;   // data buffer's size
 } w_ctrl;
 
 /**

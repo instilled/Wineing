@@ -1,45 +1,44 @@
 #ifndef _LAZY_H
 #define _LAZY_H
 
-#include <string.h>
+#include <stdio.h>
 #include <pthread.h>
 
 /*
   Optimized functions for accessing data shared among threads. The
-  optimization lies in checking a cache-aligned variable - the *global
-  version* - against a thread local variable - the *thread local
-  version*. The *global version* requires to be cache-aligned to avoid
-  false-sharing thereof. Only if versions mismatch will a lock be
-  aquired and the thread local data synchronized with the global
+  optimization lies in comparing a cache-aligned variable [1] - the
+  *global version* - against a thread local variable - the *thread
+  local version*. The *global version* requires to be cache-aligned to
+  avoid false-sharing thereof. Only if versions mismatch will a lock
+  be aquired and the thread local data synchronized with the global
   data. This pattern reduces the locking overhead significantly and is
-  similar to DCL (Double-Checked Locking).
+  similar to DCL (Double-Checked Locking) [2].
 
-  The implementation is specific to Wineing but can easily be
-  generalized as long as the following conditions are met:
+  The implementation is generally applicaple as long as the following
+  conditions are met:
 
-  1) the memory pointed by *g (see function parameter of the same name
-     in the function below) is freed and re-allocated on every write
-     operation (memory fencing)
+  1) the memory pointed by *g_data (see function parameter of the same
+     name in the function below) is declared <tt>volatile</tt> so that
+     it is always read from main memory, see [3], [4] and [5].
 
   2) data is always copied either from shared to local data or vice
      versa - if the memory pointed by is not copied the data could
      suddenly be invalid due to modification by either side
 
-  3) the instance of the shared data is global
-
-  4) the cache-line size is provided before compiling, e.g. by setting
-     CACHE_LINE_SIZE to e.g. the output of
+  4) the cache-line size determined for the target architecture [6].
+     This implementation expects a compile macro to be set, i.e.
+     CACHE_LINE_SIZE. For example set it to the output of
      '/sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size'
 
   Background information on the topic:
-  - http://stackoverflow.com/questions/794632/programmatically-get-the-cache-line-size
-  -
-  http://stackoverflow.com/questions/12592342/lock-free-check-for-modification-of-a-global-shared-state-in-c-using-cache-line
+  [1] http://stackoverflow.com/questions/12592342/lock-free-check-for-modification-of-a-global-shared-state-in-c-using-cache-line
+  [2] http://en.wikipedia.org/wiki/Double-checked_locking
+  [3] http://www.drdobbs.com/parallel/volatile-vs-volatile/212701484
+  [4] http://stackoverflow.com/questions/2044565/volatile-struct-semantics
+  [5] http://stackoverflow.com/questions/7872175/c-volatile-variables-and-cache-memory
+  [6] http://stackoverflow.com/questions/794632/programmatically-get-the-cache-line-size
 */
 
-/**
- * See below for comments on what these functions exactly do.
- */
 #if !defined(CACHE_LINE_SIZE)
 #error CACHE_LINE_SIZE not set. Invoke gcc with -DCACHE_LINE_SIZE=xx
 // Set a default CACHE_LINE_SIZE to avoid error printed by __aligned__
@@ -50,7 +49,7 @@
 /**
  * Memory aligned instances are only warranted if allocated with
  * *aligned_malloc* or similar. If statically allocated the compiler
- * will make sure the data is correctly alligned.
+ * alignes the data correctly.
  */
 struct cache_line_aligned {
   int version;
@@ -76,6 +75,10 @@ static pthread_mutex_t    g_lock;
 inline void lazy_init(int initial_version = 0)
 {
   g_version.version = initial_version;
+
+  //pthread_mutexattr_t lock_attr;
+  //pthread_mutexattr_init(&lock_attr);
+  //pthread_mutexattr_setrecursive(&lock_attr, PTHREAD_MUTEX_RECURSIVE);
   pthread_mutex_init(&g_lock, NULL);
 }
 

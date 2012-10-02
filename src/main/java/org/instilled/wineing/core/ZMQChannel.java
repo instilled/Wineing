@@ -59,7 +59,6 @@ public class ZMQChannel
         case PUSH_BIND:
             _sock.bind(_fqcn);
             break;
-
         case REQ:
         case SUB:
         case PULL_CONNECT:
@@ -68,8 +67,9 @@ public class ZMQChannel
             break;
 
         default:
-            throw new IllegalStateException("Case not implemented ["
-                    + _type + "]");
+            throw new IllegalStateException(String.format(
+                    "ZMQChannelType#%s does not support binding",
+                    _type.name()));
         }
 
         if (ZMQChannelType.SUB.equals(_type))

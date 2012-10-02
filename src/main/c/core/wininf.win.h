@@ -1,6 +1,7 @@
 #ifndef _WININF_H
 #define _WININF_H
 
+#include "NxCoreAPI.h"
 #include "chan.h"
 
 /*
@@ -14,9 +15,12 @@
   its behaviour in wininf.win.cc.
  */
 
+typedef int __stdcall (*nxcore_callback)(const NxCoreSystem *psys,
+                                         const NxCoreMessage *pmsg);
+
 int wininf_nxcore_load();
 
-int  wininf_nxcore_run(chan *cchan_out, chan *mchan, char *tape);
+int  wininf_nxcore_run(char *tape, nxcore_callback callback);
 
 void  wininf_nxcore_free();
 

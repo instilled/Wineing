@@ -6,7 +6,6 @@
 
 #include "NxCoreAPI.h"
 #include "logging/logging.h"
-#include "myProcessTape.h"
 
 static HINSTANCE g_hlib;
 
@@ -25,17 +24,16 @@ int wininf_nxcore_load()
   return 0;
 }
 
-int wininf_nxcore_run(chan *cchan_out, chan *mchan, char *tape)
+int wininf_nxcore_run(char *tape, nxcore_callback callback)
 {
-  NxCoreProcessTape pTapeProc =
+  NxCoreProcessTape processTapeFn =
     (NxCoreProcessTape) ::GetProcAddress(g_hlib, "sNxCoreProcessTape");
-  if(!pTapeProc) {
+  if(!processTapeFn) {
     log(LOG_ERROR, "Failed loading NxCoreProcessTape function");
     return -1;
   }
 
-  myProcessTape_init(cchan_out, mchan);
-  pTapeProc(tape, 0, 0, 0, myProcessTape);
+  processTapeFn(tape, 0, 0, 0, callback);
 
   return 0;
 }

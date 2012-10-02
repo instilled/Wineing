@@ -140,7 +140,7 @@ exe_WI_NAME            = $(BINDIR)/wineing.exe
 exe_WI_CC_SRCS         =
 exe_WI_CXX_SRCS        = $(SRCDIR)/core/wininf.win.cc \
                          $(SRCDIR)/core/chan.cc \
-                         $(SRCDIR)/wineing.cc \
+                         $(SRCDIR)/wineing.win.cc \
                          $(SRCDIR)/main.win.cc
 exe_WI_LDFLAGS         =
 exe_WI_WIN_LDFLAGS     = -mconsole \
@@ -188,7 +188,7 @@ ALL_OPTIONS           = -DLOG_LEVEL=$(LOG_LEVEL) \
 			-DCACHE_LINE_SIZE=$(CACHE_LINE_SIZE)
 DEBUG                 = -ggdb -DDEBUG
 OPTIONS               = -O3
-TEST_OPTIONS          = -lcheck -lstdc++ -ftest-coverage
+TEST_OPTIONS          = -lcheck -ftest-coverage
 TEST_INCLUDE_PATH     = -I$(TESTSRCDIR)
 LIBRARY_PATH          = # -DMYSYMBOL=VAL
 LIBRARIES             = # -lzmq

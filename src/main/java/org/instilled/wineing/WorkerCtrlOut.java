@@ -7,6 +7,7 @@ import org.instilled.wineing.core.Worker;
 import org.instilled.wineing.core.ZMQChannel;
 import org.instilled.wineing.core.ZMQChannel.ZMQChannelType;
 import org.instilled.wineing.gen.WineingCtrlProto.Request;
+import org.instilled.wineing.gen.WineingCtrlProto.Request.Type;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,7 +24,7 @@ public class WorkerCtrlOut implements Worker
     public WorkerCtrlOut(String cchanOut)
     {
         _cchanOut = cchanOut;
-        _ctrlQueue = new ArrayBlockingQueue<Request>(10);
+        _ctrlQueue = new ArrayBlockingQueue<Request>(20);
     }
 
     public void shutdown()
@@ -62,6 +63,12 @@ public class WorkerCtrlOut implements Worker
                 byte[] buffer = request.toByteArray();
                 ctrl_out.send(buffer);
 
+                // If shutdown was requested we exit the thread...
+                // No more processing is done
+                if (Type.SHUTDOWN.equals(request.getType()))
+                {
+                    break;
+                }
             } catch (InterruptedException e)
             {
                 // TODO proper error handling

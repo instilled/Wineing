@@ -11,6 +11,7 @@ import org.instilled.wineing.core.ZMQChannel.ZMQChannelType;
 import org.instilled.wineing.gen.WineingCtrlProto.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.zeromq.ZMQException;
 
 import com.google.protobuf.InvalidProtocolBufferException;
 
@@ -68,20 +69,17 @@ public class WorkerCtrlIn implements Worker
                 res = Response.parseFrom(buffer);
                 processResponse(res);
 
-                try
-                {
-                    Thread.sleep(1000);
-                } catch (InterruptedException e)
-                {
-                }
             } catch (InvalidProtocolBufferException e)
             {
-                throw new IllegalStateException(
-                        "Failed receiving Response", e);
+                log.error("Failed to process Response message.", e);
+            } catch (ZMQException e)
+            {
+                // Ignore. We expect an exception when shutting down
             }
 
             // Do something with response
         }
+        cchan_in.close();
     }
 
     private void processResponse(Response res)

@@ -14,9 +14,9 @@ option java_outer_classname = "WineingCtrlProto";
 message Request {
 
   enum Type {
-     START    = 0; // Sent to start streaming market data
-     STOP     = 1; // Sent to stop streaming market data
-     SHUTDOWN = 2; // Shutdowns the application
+     MARKET_START    = 0; // Sent to start streaming market data
+     MARKET_STOP     = 1; // Sent to stop streaming market data
+     SHUTDOWN        = 2; // Shutdowns the application
   }
 
   // A unique id identifying the request.
@@ -38,9 +38,12 @@ message Response {
   required int64 requestId = 1;   // The id of the request
 
   enum Type {
-     OK      = 0;
-     ERR     = 1;
-     ERR_MARKET_RUNNING = 2;
+     MARKET_START_OK           = 0;
+     MARKET_STOP_OK            = 1;
+     SHUTDOWN_OK               = 2;
+     
+     ERR                       = 3;
+     MARKET_START_ERR_RUNNING  = 4;
   }
 
   required Type type = 2;
