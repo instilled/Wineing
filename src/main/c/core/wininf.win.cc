@@ -1,5 +1,5 @@
 
-#include "wininf.win.h"
+#include "wininf.h"
 
 #include <windows.h>
 #include <stdio.h>
@@ -24,7 +24,9 @@ int wininf_nxcore_load()
   return 0;
 }
 
-int wininf_nxcore_run(char *tape, nxcore_callback callback)
+int wininf_nxcore_run(char *tape,
+                      int __stdcall (*fn) (const NxCoreSystem *,
+                                           const NxCoreMessage *))
 {
   NxCoreProcessTape processTapeFn =
     (NxCoreProcessTape) ::GetProcAddress(g_hlib, "sNxCoreProcessTape");
@@ -33,7 +35,7 @@ int wininf_nxcore_run(char *tape, nxcore_callback callback)
     return -1;
   }
 
-  processTapeFn(tape, 0, 0, 0, callback);
+  processTapeFn(tape, 0, 0, 0, fn);
 
   return 0;
 }

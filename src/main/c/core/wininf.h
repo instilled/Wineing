@@ -2,7 +2,12 @@
 #define _WININF_H
 
 #include "NxCoreAPI.h"
-#include "chan.h"
+
+#ifdef __WINE__
+   #define STDCALL __stdcall
+#else
+   #define STDCALL
+#endif
 
 /*
   Dependencies to NxCore and other windows stuff has been removed from
@@ -15,12 +20,11 @@
   its behaviour in wininf.win.cc.
  */
 
-typedef int __stdcall (*nxcore_callback)(const NxCoreSystem *psys,
-                                         const NxCoreMessage *pmsg);
-
 int wininf_nxcore_load();
 
-int  wininf_nxcore_run(char *tape, nxcore_callback callback);
+int wininf_nxcore_run(char *tape,
+                      int STDCALL (*fn) (const NxCoreSystem *,
+                                         const NxCoreMessage *));
 
 void  wininf_nxcore_free();
 
