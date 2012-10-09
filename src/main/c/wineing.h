@@ -2,6 +2,7 @@
 #ifndef _WINEING_H
 #define _WINEING_H
 
+#include <string.h>
 #include "logging/logging.h"
 
 
@@ -94,5 +95,30 @@ void* cchan_out_thread(void*);
  * messages, e.g. errors, are sent to *cchan_out_thread*.
  */
 void* market_thread(void*);
+
+
+inline void _copy_local_to_shared (const void *t, void *g)
+{
+  const w_ctrl *local = (const w_ctrl*)t;
+  w_ctrl *shared = (w_ctrl*)g;
+
+  shared->cmd  = local->cmd;
+  shared->size = local->size;
+  if(0 < local->size) {
+    memcpy(shared->data, local->data, local->size);
+  }
+}
+
+inline void _copy_shared_to_local(void *t, const void *g)
+{
+  w_ctrl *local = (w_ctrl*)t;
+  const w_ctrl *shared = (const w_ctrl*)g;
+
+  local->cmd  = shared->cmd;
+  local->size = shared->size;
+  if(0 < shared->size) {
+    memcpy(local->data, shared->data, shared->size);
+  }
+}
 
 #endif /* _WINEING_H */
