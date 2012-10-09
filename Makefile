@@ -140,6 +140,7 @@ exe_WI_NAME            = $(BINDIR)/wineing.exe
 exe_WI_CC_SRCS         =
 exe_WI_CXX_SRCS        = $(SRCDIR)/core/wininf.win.cc \
                          $(SRCDIR)/core/chan.cc \
+                         $(SRCDIR)/tape_processor/tape_processor.win.cc \
                          $(SRCDIR)/wineing.win.cc \
                          $(SRCDIR)/main.win.cc
 exe_WI_LDFLAGS         =
@@ -162,8 +163,12 @@ exe_WI_OBJS            = $(subst .c,.c.o,$(exe_WI_CC_SRCS)) \
 # test_wineing.exe
 exe_WI_TEST_NAME       = $(TESTBINDIR)/test_wineing
 exe_WI_TEST_CC_SRCS    =
-exe_WI_TEST_CXX_SRCS   = $(TESTSRCDIR)/test_main.cc \
-                         $(SRCDIR)/core/chan.cc
+exe_WI_TEST_CXX_SRCS   = $(SRCDIR)/core/chan.cc \
+                         $(SRCDIR)/wineing.cc \
+                         $(TESTSRCDIR)/core/wininf.cc \
+                         $(TESTSRCDIR)/tape_processor/tape_processor.cc \
+                         $(TESTSRCDIR)/test_main.cc
+
 exe_WI_TEST_OBJS       = $(subst .c,.c.o,$(exe_WI_TEST_CC_SRCS)) \
                          $(subst .cc,.cc.o,$(exe_WI_TEST_CXX_SRCS)) \
                          $(gen_PB_OBJS)
@@ -189,7 +194,9 @@ ALL_OPTIONS           = -DLOG_LEVEL=$(LOG_LEVEL) \
 DEBUG                 = -ggdb -DDEBUG
 OPTIONS               = -O3
 TEST_OPTIONS          = -lcheck -ftest-coverage
-TEST_INCLUDE_PATH     = -I$(TESTSRCDIR)
+TEST_INCLUDE_PATH     = -I$(GENDIR) \
+                        -I$(SRCDIR) \
+                        -I$(TESTSRCDIR)
 LIBRARY_PATH          = # -DMYSYMBOL=VAL
 LIBRARIES             = # -lzmq
 DLL_PATH              =
@@ -218,7 +225,6 @@ ALL_INCL              = $(DEFINES) \
 
 ALL_TEST_INCL         = $(DEFINES) \
                         $(ALL_OPTIONS) \
-                        $(INCLUDE_PATH) \
                         $(TEST_OPTIONS) \
                         $(TEST_INCLUDE_PATH)
 

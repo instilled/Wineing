@@ -1,7 +1,8 @@
 #ifndef _WININF_H
 #define _WININF_H
 
-#include "NxCoreAPI.h"
+struct NxCoreSystem;
+struct NxCoreMessage;
 
 #ifdef __WINE__
    #define STDCALL __stdcall
@@ -20,14 +21,14 @@
   its behaviour in wininf.win.cc.
  */
 
-int wininf_nxcore_load();
+int  wininf_nxcore_load();
 
-int wininf_nxcore_run(char *tape,
+int  wininf_nxcore_run(char *tape,
                       int STDCALL (*fn) (const NxCoreSystem *,
                                          const NxCoreMessage *));
 
-void  wininf_nxcore_free();
+void wininf_nxcore_free();
 
-int wininf_file_exists(const char *path);
+int  wininf_file_exists(const char *path);
 
 #endif /* _INXCORE_H */

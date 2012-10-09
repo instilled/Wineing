@@ -3,8 +3,7 @@
 #define _WINEING_H
 
 #include <string.h>
-#include "logging/logging.h"
-
+#include "core/chan.h"
 
 // Application defaults
 #define DEFAULTS_CCHAN_IN_NAME            "tcp://*:9990"
@@ -59,6 +58,26 @@ typedef struct
   char * volatile data;    // data buffer
   size_t volatile size;   // data buffer's size
 } w_ctrl;
+
+/**
+ * Data shared among threads (and tape_processor.cc below and possibly
+ * every other file linked against this one - static was omitted in
+ * the inctance declaration). This is mainly for signalling purposes
+ * but also to exchange some character data. To assure each thread
+ * sees the correct values it is required to follow the rules:
+ *
+ * 1) to update the value use *lazy_update_gloabl_if_owner*
+ * 2) to read the value only with *lazy_update_local_if_changed*
+ *
+ * There's loads of details on the topic in lazy.h
+ */
+extern w_ctrl g_data;
+
+/**
+ * Shared among wineing.win.cc and tape_processor.cc below.
+ */
+extern chan *g_market_thread_mchan;
+extern chan *g_market_thread_ichan_out;
 
 /**
  * Initializes Wineing.

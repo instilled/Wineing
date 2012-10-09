@@ -2,6 +2,26 @@
 // this file is being included from wineing.win.cc and thus requires
 // almost no includes
 
+#include "tape_processor.h"
+
+#include <windows.h>
+#include "NxCoreAPI.h"
+
+#include <unistd.h>
+#include <pthread.h>
+#include <sstream>
+
+#include "wineing.h"
+#include "core/chan.h"
+#include "core/lazy.h"
+#include "core/wininf.h"
+
+// Google Protobuf generated headers
+#include "WineingCtrlProto.pb.h"
+#include "WineingMarketDataProto.pb.h"
+#include <google/protobuf/io/zero_copy_stream_impl.h>
+#include <google/protobuf/io/zero_copy_stream_impl_lite.h>
+
 /**
  * Prcesses each market data update from NxCore sends it through a ZMQ
  * channel to the client. The 
