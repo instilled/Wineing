@@ -7,9 +7,9 @@ compatibility layer between two processes, one running NxCore and
 another one running a linux application. It aims to be fail-proof even
 under high loads. Google Protobuf is used to generate the wiring protocol.
 
-The code is heavily documented and tries follows
-[doxygen][url_doxygen] documentation schema, see for example
-*Makefile* or *src/main/c/wineing.win.cc*.
+The code is heavily documented and follows [doxygen][url_doxygen]
+documentation schema, see for example *Makefile* or
+*src/main/c/impl/all/core/wineing.cc*.
 
 The last section describes how to run the java WineingExampleClient application.
 
@@ -31,8 +31,8 @@ Running Wineing is easy. Once compiled the binary is available in
 type
 
     $ noglob <WINEING-ROOT>/target/<WINEING-VERSION>/wineing.exe \
-                    --schan=tcp://*:9999 \
-                    --cchan=tcp://*:9990 \
+                    --cchan-in=tcp://*:9999 \
+                    --cchan-out=tcp://*:9991 \
                     --mchan=tcp://*:9992
                     [--tape-root=<dir>]
 
@@ -95,9 +95,9 @@ with maximal optimization type
 
     $ make release
 
-In any case `make` will run the tests (bähh that's not yet true)
-against the binary. Finally the binary is placed to
-`wineing\target`. To clean the build hit
+In any case `make` will run the tests against the binary. If any test
+fails the compilation will terminate with an error. Finally the binary
+is placed to `wineing\target`. To clean the build enter
 
     $ make clean
 
