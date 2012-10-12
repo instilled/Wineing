@@ -1,11 +1,11 @@
 
-#include "wininf.h"
+#include "nx/nxinf.h"
 
 #include <windows.h>
 #include <stdio.h>
 
 #include "NxCoreAPI.h"
-#include "logging/logging.h"
+#include "log/logging.h"
 
 static HINSTANCE g_hlib;
 

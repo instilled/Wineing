@@ -1,5 +1,6 @@
 
-#include "chan.h"
+#include "net/chan.h"
+#include "log/logging.h"
 
 using namespace std;
 

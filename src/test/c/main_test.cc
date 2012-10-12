@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <check.h>
 
-#include "core/lazy_test.cc"
+#include "impl/conc/conc_test.cc"
 
 /*
    gcc -I ../../main/c/ -I . -Wall -lcheck -ftest-coverage -std=c++11 \

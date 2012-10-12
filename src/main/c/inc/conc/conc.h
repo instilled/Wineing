@@ -57,38 +57,15 @@ struct cache_line_aligned {
 } __attribute__ ((aligned (CACHE_LINE_SIZE)));
 
 /**
- * Initialize version with 0. A statically allocated instance of a
- * struct is always going to be aligned.
- */
-static cache_line_aligned g_version = {0};
-
-/**
- * Lock aquired to either, copy from shared to local memory, or local
- * to shared memory.
- */
-static pthread_mutex_t    g_lock;
-
-/**
  * Initializes the global version to a user defined value. Defaults to
  * to <tt>0</tt>.
  */
-inline void lazy_init(int initial_version = 0)
-{
-  g_version.version = initial_version;
-
-  //pthread_mutexattr_t lock_attr;
-  //pthread_mutexattr_init(&lock_attr);
-  //pthread_mutexattr_setrecursive(&lock_attr, PTHREAD_MUTEX_RECURSIVE);
-  pthread_mutex_init(&g_lock, NULL);
-}
+void lazy_init(int);
 
 /**
  * Frees resources.
  */
-inline void lazy_destroy()
-{
-  pthread_mutex_destroy(&g_lock);
-}
+void lazy_destroy();
 
 /**
  * Update the shared state. Does so by updating the global state only
@@ -114,38 +91,10 @@ inline void lazy_destroy()
  * \param *fn        Function invoked to copy thread local to globally
  *                   shared memory
  */
-inline int lazy_update_global_if_owner(int t_version,
-                                       const void *t_data,
-                                       void *g_data,
-                                       void (*fn)(const void*, void*))
-{
-  // Comparing against g_version without aquiring lock is only
-  // safe because it is cache-aligned thus avoiding sharing of
-  // partial data (false-sharing)
-  if(t_version == g_version.version) {
-    // Enter critical section
-    pthread_mutex_lock(&g_lock);
-
-    // It is required to update g_version within the critical section
-    // because otherwise another thread might aquire the lock while
-    // assigning the value, thus leading to an inconsistency in the
-    // data.
-    g_version.version = ++t_version;
-
-    // Copy the data
-    fn(t_data, g_data);
-
-    // Leave critical section
-    pthread_mutex_unlock(&g_lock);
-
-    // Return the new version
-    return t_version;
-
-  } else {
-    return g_version.version;
-
-  }
-}
+int lazy_update_global_if_owner(int t_version,
+                                const void *t_data,
+                                void *g_data,
+                                void (*fn)(const void*, void*));
 
 /**
  * A CAS like operation for updating thread local from a global
@@ -177,39 +126,9 @@ inline int lazy_update_global_if_owner(int t_version,
  * \sa
  * http://stackoverflow.com/questions/12592342/lock-free-check-for-modification-of-a-global-shared-state-in-c-using-cache-line
  */
-
-inline int lazy_update_local_if_changed(int t_version,
-                                        void *t_data,
-                                        const void *g_data,
-                                        void (*fn)(void*, const void*))
-{
-  // False-sharing of g_msg_version can only be avoided if the
-  // variable spawns full cache-lines, in this case exactly
-  // one. Satisfied by memory-aligning and padding the struct to
-  // cache-line size. See stackoverflow article
-  // http://stackoverflow.com/questions/12592342/lock-free-check-for-modification-of-a-global-shared-state-in-c-using-cache-line
-  if(t_version == g_version.version) {
-    // Nothing to do if versions match
-    return t_version;
-
-  } else {
-    // Enter critical section
-    pthread_mutex_lock(&g_lock);
-    {
-      // Local version requires update within the locked area so that
-      // it is update with a possibly illegal value. The value would
-      // be illegal if another thread updates the variable before this
-      // thread enters the critical section.
-      t_version = g_version.version;
-
-      // Copy the data
-      fn(t_data, g_data);
-    }
-
-    // Leave critical section
-    pthread_mutex_unlock(&g_lock);
-    return t_version;
-  }
-}
+int lazy_update_local_if_changed(int t_version,
+                                 void *t_data,
+                                 const void *g_data,
+                                 void (*fn)(void*, const void*));
 
 #endif /* _LAZY_H */

@@ -129,19 +129,20 @@ CACHE_LINE_SIZE       = $(shell cat /sys/devices/system/cpu/cpu0/cache/index0/co
 # TODO: If a *.proto file changes 'make all' will not recognize the
 # file has changed. It is required to manually invoke 'make clean &&
 # make all'.
-GENS                  = $(GENSRCDIR)/WineingCtrlProto.proto \
-                        $(GENSRCDIR)/WineingMarketDataProto.proto
 EXES                  = $(exe_WI_NAME)
 TEST_EXES             = $(exe_WI_TEST_NAME)
+GENS                  = $(GENSRCDIR)/WineingCtrlProto.proto \
+                        $(GENSRCDIR)/WineingMarketDataProto.proto
 
 ## Executables (targets)
 # wineing.exe
 exe_WI_NAME            = $(BINDIR)/wineing.exe
 exe_WI_CC_SRCS         =
-exe_WI_CXX_SRCS        = $(SRCDIR)/core/wininf.win.cc \
-                         $(SRCDIR)/core/chan.cc \
-                         $(SRCDIR)/tape_processor/tape_processor.win.cc \
-                         $(SRCDIR)/wineing.win.cc \
+exe_WI_CXX_SRCS        = $(SRCDIR)/impl/wine/nx/nxinf.win.cc \
+                         $(SRCDIR)/impl/wine/nx/nxtape.win.cc \
+                         $(SRCDIR)/impl/wine/core/wineing.win.cc \
+                         $(SRCDIR)/impl/all/net/chan.cc \
+                         $(SRCDIR)/impl/all/conc/conc.cc \
                          $(SRCDIR)/main.win.cc
 exe_WI_LDFLAGS         =
 exe_WI_WIN_LDFLAGS     = -mconsole \
@@ -160,14 +161,15 @@ exe_WI_OBJS            = $(subst .c,.c.o,$(exe_WI_CC_SRCS)) \
                          $(subst .cc,.cc.o,$(exe_WI_CXX_SRCS)) \
                          $(gen_PB_OBJS)
 
-# test_wineing.exe
-exe_WI_TEST_NAME       = $(TESTBINDIR)/test_wineing
+# wineing.test
+exe_WI_TEST_NAME       = $(TESTBINDIR)/wineing.test
 exe_WI_TEST_CC_SRCS    =
-exe_WI_TEST_CXX_SRCS   = $(SRCDIR)/core/chan.cc \
-                         $(SRCDIR)/wineing.cc \
-                         $(TESTSRCDIR)/core/wininf.cc \
-                         $(TESTSRCDIR)/tape_processor/tape_processor.cc \
-                         $(TESTSRCDIR)/test_main.cc
+exe_WI_TEST_CXX_SRCS   = $(SRCDIR)/impl/all/net/chan.cc \
+                         $(SRCDIR)/impl/all/conc/conc.cc \
+                         $(SRCDIR)/impl/all/core/wineing.cc \
+                         $(SRCDIR)/impl/linux/nx/nxinf.cc \
+                         $(SRCDIR)/impl/linux/nx/nxtape.cc \
+                         $(TESTSRCDIR)/main_test.cc
 
 exe_WI_TEST_OBJS       = $(subst .c,.c.o,$(exe_WI_TEST_CC_SRCS)) \
                          $(subst .cc,.cc.o,$(exe_WI_TEST_CXX_SRCS)) \
@@ -195,8 +197,8 @@ DEBUG                 = -ggdb -DDEBUG
 OPTIONS               = -O3
 TEST_OPTIONS          = -lcheck -ftest-coverage
 TEST_INCLUDE_PATH     = -I$(GENDIR) \
-                        -I$(SRCDIR) \
-                        -I$(TESTSRCDIR)
+                        -I$(SRCDIR)/inc \
+                        -I$(TESTSRCDIR)/inc
 LIBRARY_PATH          = # -DMYSYMBOL=VAL
 LIBRARIES             = # -lzmq
 DLL_PATH              =
@@ -204,7 +206,7 @@ DLL_IMPORTS           = # -lole32
 
 DEFINES               =
 INCLUDE_PATH          = -I$(GENDIR) \
-                        -I$(SRCDIR) \
+                        -I$(SRCDIR)/inc \
                         -I$(RESDIR)/NxCoreAPI
 CFLAGS                = -Wall
 CXXFLAGS              = -Wall
@@ -339,6 +341,8 @@ $(GENDIR)/%.cc.o: $(GENDIR)/%.cc
 
 $(GENDIR)/%.cc:
 	$(PROTOC) -I=$(GENSRCDIR) --cpp_out=$(GENDIR) $(patsubst $(GENDIR)/%.pb.cc,$(GENSRCDIR)/%.proto,$@)
+	mkdir -p $(GENDIR)/gen
+	cp $(GENDIR)/*.pb.h $(GENDIR)/gen/
 
 # Special target for protobuf files
 #%.pb.cc.o: %.pb.cc
@@ -349,6 +353,7 @@ $(GENDIR)/%.cc:
 # Rules for cleaning
 clean:
 	$(RM) $(gen_PB_SRCS) $(gen_PB_OBJS)
+	$(RM) -rf $(GENDIR)/gen
 	$(RM) $(exe_WI_OBJS)
 	$(RM) -rf $(BINDIR)/
 	$(RM) $(exe_WI_TEST_OBJS)

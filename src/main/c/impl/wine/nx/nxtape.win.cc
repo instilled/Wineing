@@ -1,30 +1,29 @@
 
-// this file is being included from wineing.win.cc and thus requires
-// almost no includes
-
-#include "tape_processor.h"
-
+// Include windows.h first because it will cause redefinition errors
+// for 'struct timeval'. There's a work around to this: unbind timeval
+// after including posix headers. We leave it that way for the sake of
+// simplicity.
 #include <windows.h>
+
+#include "conc/conc.h"
+#include "core/wineing.h"
+#include "net/chan.h"
+#include "nx/nxtape.h"
+#include "nx/nxinf.h"
+#include "gen/WineingCtrlProto.pb.h"
+#include "gen/WineingMarketDataProto.pb.h"
+
 #include "NxCoreAPI.h"
 
 #include <unistd.h>
 #include <pthread.h>
 #include <sstream>
-
-#include "wineing.h"
-#include "core/chan.h"
-#include "core/lazy.h"
-#include "core/wininf.h"
-
-// Google Protobuf generated headers
-#include "WineingCtrlProto.pb.h"
-#include "WineingMarketDataProto.pb.h"
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 
 /**
  * Prcesses each market data update from NxCore sends it through a ZMQ
- * channel to the client. The 
+ * channel to the client. The
  */
 int STDCALL my_processTapeFn(const NxCoreSystem *pNxCoreSys,
                              const NxCoreMessage *pNxCoreMsg)
@@ -94,4 +93,3 @@ int STDCALL my_processTapeFn(const NxCoreSystem *pNxCoreSys,
   return t_data.cmd < WINEING_CTRL_CMD_MARKET_RUN ?
     NxCALLBACKRETURN_STOP : NxCALLBACKRETURN_CONTINUE;
 }
-

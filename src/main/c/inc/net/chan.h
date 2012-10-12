@@ -2,7 +2,6 @@
 #define _CHAN_H
 
 #include <zmq.h>
-#include "logging/logging.h"
 
 #define CHAN_RECV_BLOCK     0
 #define CHAN_RECV_NOBLOCK   ZMQ_NOBLOCK

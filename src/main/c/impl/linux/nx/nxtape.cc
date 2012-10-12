@@ -6,7 +6,7 @@
  *
  */
 
-#include "tape_processor/tape_processor.h"
+#include "nx/nxtape.h"
 
 /**
  * Does nothing

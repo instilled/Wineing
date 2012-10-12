@@ -1,9 +1,9 @@
 
 /*
  * Stub
- */ 
+ */
 
-#include "core/wininf.h"
+#include "nx/nxinf.h"
 
 int wininf_nxcore_load()
 {
@@ -19,7 +19,7 @@ int wininf_nxcore_run(char *tape,
 
 void wininf_nxcore_free()
 {
-  
+
 }
 
 int wininf_file_exists(const char *str)

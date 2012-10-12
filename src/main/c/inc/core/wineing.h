@@ -2,8 +2,9 @@
 #ifndef _WINEING_H
 #define _WINEING_H
 
+#include "net/chan.h"
+
 #include <string.h>
-#include "core/chan.h"
 
 // Application defaults
 #define DEFAULTS_CCHAN_IN_NAME            "tcp://*:9990"

@@ -2,4 +2,4 @@
 #include <windows.h>
 #include "NxCoreAPI.h"
 
-#include "wineing.cc"
+#include "../../all/core/wineing.cc"

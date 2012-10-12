@@ -3,7 +3,31 @@
 
 #define CACHE_LINE_SIZE 64
 
-#include "lazy_test.h"
+#include "conc/conc.h"
+
+struct my_data {
+  char data;
+  size_t size;
+};
+
+static inline void t_to_g (const void *t, void *g)
+{
+  const my_data *local = (const my_data*)t;
+  my_data *shared = (my_data*)g;
+
+  shared->size = local->size;
+  shared->data = local->data;
+}
+
+static inline void g_to_t(void *t, const void *g)
+{
+  my_data *local = (my_data*)t;
+  const my_data *shared = (const my_data*)g;
+
+  local->size = shared->size;
+  local->data = shared->data;
+}
+
 
 
 START_TEST (test_StructIsCacheLineAligned)

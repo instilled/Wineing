@@ -1,7 +1,9 @@
 
 #include <windows.h>
 
-#include "wineing.h"
+#include "core/wineing.h"
+#include "log/logging.h"
+
 #include <stdlib.h>
 #include <string.h>
 
