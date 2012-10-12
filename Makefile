@@ -129,50 +129,50 @@ CACHE_LINE_SIZE       = $(shell cat /sys/devices/system/cpu/cpu0/cache/index0/co
 # TODO: If a *.proto file changes 'make all' will not recognize the
 # file has changed. It is required to manually invoke 'make clean &&
 # make all'.
-EXES                  = $(exe_WI_NAME)
-TEST_EXES             = $(exe_WI_TEST_NAME)
+EXES                  = $(wineing_NAME)
+TEST_EXES             = $(wineing_TEST_NAME)
 GENS                  = $(GENSRCDIR)/WineingCtrlProto.proto \
                         $(GENSRCDIR)/WineingMarketDataProto.proto
 
 ## Executables (targets)
 # wineing.exe
-exe_WI_NAME            = $(BINDIR)/wineing.exe
-exe_WI_CC_SRCS         =
-exe_WI_CXX_SRCS        = $(SRCDIR)/impl/wine/nx/nxinf.win.cc \
-                         $(SRCDIR)/impl/wine/nx/nxtape.win.cc \
-                         $(SRCDIR)/impl/wine/core/wineing.win.cc \
+wineing_NAME            = $(BINDIR)/wineing.exe
+wineing_CC_SRCS         =
+wineing_CXX_SRCS        = $(SRCDIR)/impl/wine/nx/nxinf.cc \
+                         $(SRCDIR)/impl/wine/nx/nxtape.cc \
+                         $(SRCDIR)/impl/wine/core/wineing.cc \
                          $(SRCDIR)/impl/all/net/chan.cc \
                          $(SRCDIR)/impl/all/conc/conc.cc \
                          $(SRCDIR)/main.win.cc
-exe_WI_LDFLAGS         =
-exe_WI_WIN_LDFLAGS     = -mconsole \
-                         $(exe_WI_LDFLAGS)
-exe_WI_LIBRARY_PATH    =
-exe_WI_LIBRARIES       = -luuid \
-                         -lzmq \
-                         -lprotobuf \
-                         -lpthread
-exe_WI_DLL_PATH        =
-exe_WI_DLLS            = #-lodbc32 \
+wineing_LDFLAGS         =
+wineing_WIN_LDFLAGS     = -mconsole \
+                         $(wineing_LDFLAGS)
+wineing_LIBRARY_PATH    =
+wineing_LIBRARIES       = -luuid \
+                          -lzmq \
+                          -lprotobuf \
+                          -lpthread
+wineing_DLL_PATH        =
+wineing_DLLS            = #-lodbc32 \
                          -lole32 \
                          -lwinspool \
                          -lodbccp32
-exe_WI_OBJS            = $(subst .c,.c.o,$(exe_WI_CC_SRCS)) \
-                         $(subst .cc,.cc.o,$(exe_WI_CXX_SRCS)) \
+wineing_OBJS            = $(subst .c,.c.o,$(wineing_CC_SRCS)) \
+                         $(subst .cc,.cc.o,$(wineing_CXX_SRCS)) \
                          $(gen_PB_OBJS)
 
 # wineing.test
-exe_WI_TEST_NAME       = $(TESTBINDIR)/wineing.test
-exe_WI_TEST_CC_SRCS    =
-exe_WI_TEST_CXX_SRCS   = $(SRCDIR)/impl/all/net/chan.cc \
+wineing_TEST_NAME       = $(TESTBINDIR)/wineing.test
+wineing_TEST_CC_SRCS    =
+wineing_TEST_CXX_SRCS   = $(SRCDIR)/impl/all/net/chan.cc \
                          $(SRCDIR)/impl/all/conc/conc.cc \
                          $(SRCDIR)/impl/all/core/wineing.cc \
                          $(SRCDIR)/impl/linux/nx/nxinf.cc \
                          $(SRCDIR)/impl/linux/nx/nxtape.cc \
                          $(TESTSRCDIR)/main_test.cc
 
-exe_WI_TEST_OBJS       = $(subst .c,.c.o,$(exe_WI_TEST_CC_SRCS)) \
-                         $(subst .cc,.cc.o,$(exe_WI_TEST_CXX_SRCS)) \
+wineing_TEST_OBJS       = $(subst .c,.c.o,$(wineing_TEST_CC_SRCS)) \
+                         $(subst .cc,.cc.o,$(wineing_TEST_CXX_SRCS)) \
                          $(gen_PB_OBJS)
 
 
@@ -282,17 +282,17 @@ todo:
 
 run-tests: test
 	cd $(TESTBINDIR)
-	./$(exe_WI_TEST_NAME)
+	./$(wineing_TEST_NAME)
 
 cache_line:
 	@echo "Setting CACHE_LINE_SIZE to $(CACHE_LINE_SIZE)"
 
 
-$(exe_WI_TEST_NAME): gen cache_line $(exe_WI_TEST_OBJS)
-	$(CXX) $(ALL_LIBS) $(ALL_TEST_INCL) $(exe_WI_LDFLAGS) $(exe_WI_TEST_OBJS) $(exe_WI_LIBRARY_PATH) $(exe_WI_LIBRARIES) -o $@
+$(wineing_TEST_NAME): gen cache_line $(wineing_TEST_OBJS)
+	$(CXX) $(ALL_LIBS) $(ALL_TEST_INCL) $(wineing_LDFLAGS) $(wineing_TEST_OBJS) $(wineing_LIBRARY_PATH) $(wineing_LIBRARIES) -o $@
 
-$(exe_WI_NAME): gen cache_line $(exe_WI_OBJS)
-	$(WCXX) $(ALL_LIBS) $(ALL_INCL) $(exe_WI_WIN_LDFLAGS) $(exe_WI_OBJS) $(exe_WI_DLL_PATH) $(exe_WI_DLLS) $(exe_WI_LIBRARY_PATH) $(exe_WI_LIBRARIES) -o $@ 
+$(wineing_NAME): gen cache_line $(wineing_OBJS)
+	$(WCXX) $(ALL_LIBS) $(ALL_INCL) $(wineing_WIN_LDFLAGS) $(wineing_OBJS) $(wineing_DLL_PATH) $(wineing_DLLS) $(wineing_LIBRARY_PATH) $(wineing_LIBRARIES) -o $@
 
 gen: $(gen_PB_SRCS)
 
@@ -305,6 +305,7 @@ dirs:
 	mkdir -p $(TESTBINDIR)
 	mkdir -p $(GENDIR)
 
+#%.win.cc.o: %.win.cc
 # Default c/cc targets
 %.c.o: %.c
 	$(CC) $(CFLAGS) $(CEXTRA) $(ALL_INCL) -o $@ -c $<
@@ -316,11 +317,14 @@ dirs:
 # .win.(c|cc) will be compiled with winegcc or wineg++ respectively.
 # Following this convention circumvents writing specific targets for
 # each file that needs to be compiled withe either winegcc or wineg++.
-%.win.c.o: %.win.c
-	$(WCC) $(CFLAGS) $(CEXTRA) $(ALL_INCL) -o $@ -c $<
-
 %.win.cc.o: %.win.cc
-	$(WCXX) $(CXXFLAGS) $(CXXEXTRA) $(ALL_INCL) -o $@ -c $<
+	$(WCXX) $(CFLAGS) $(CEXTRA) $(ALL_INCL) -o $@ -c $<
+
+$(SRCDIR)/impl/wine/%.cc.o: $(SRCDIR)/impl/wine/%.cc
+	$(WCXX) $(CFLAGS) $(CEXTRA) $(ALL_INCL) -o $@ -c $<
+
+$(SRCDIR)/impl/wine/%.c.o: $(SRCDIR)/impl/wine/%.c
+	$(WCC) $(CXXFLAGS) $(CXXEXTRA) $(ALL_INCL) -o $@ -c $<
 
 # It is not possible to use wildcards (automatic variables in make
 # jargon) but in the recipe. They're illegal in the target and
@@ -354,8 +358,8 @@ $(GENDIR)/%.cc:
 clean:
 	$(RM) $(gen_PB_SRCS) $(gen_PB_OBJS)
 	$(RM) -rf $(GENDIR)/gen
-	$(RM) $(exe_WI_OBJS)
+	$(RM) $(wineing_OBJS)
 	$(RM) -rf $(BINDIR)/
-	$(RM) $(exe_WI_TEST_OBJS)
+	$(RM) $(wineing_TEST_OBJS)
 	$(RM) -rf $(TESTBINDIR)/
 # <<< end 'Build rules'
