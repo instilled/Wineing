@@ -1,5 +1,6 @@
 package org.instilled.wineing;
 
+import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -13,7 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.zeromq.ZMQException;
 
-import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.CodedInputStream;
 
 public class WorkerCtrlIn implements Worker
 {
@@ -26,6 +27,8 @@ public class WorkerCtrlIn implements Worker
 
     private volatile boolean _running;
 
+    private ZMQChannel _cchan_in;
+
     public WorkerCtrlIn(String cchanIn)
     {
         _cchanIn = cchanIn;
@@ -37,6 +40,7 @@ public class WorkerCtrlIn implements Worker
     public void shutdown()
     {
         _running = false;
+        _cchan_in.close();
     }
 
     public void setDefaultResponseProcessor(ResponseProcessor p)
@@ -52,24 +56,28 @@ public class WorkerCtrlIn implements Worker
     @Override
     public void run()
     {
+        byte[] buffer = new byte[1024];
+
         _running = true;
 
         // Start incoming channel. Listens to replies from
         // Wineing
-        ZMQChannel cchan_in = new ZMQChannel(_cchanIn,
+        _cchan_in = new ZMQChannel(_cchanIn,
                 ZMQChannelType.PULL_CONNECT);
-        cchan_in.bind();
+        _cchan_in.bind();
 
         while (_running)
         {
             Response res;
             try
             {
-                byte[] buffer = cchan_in.receive();
-                res = Response.parseFrom(buffer);
+                int read = _cchan_in.receive(buffer, 0, buffer.length);
+                CodedInputStream is = CodedInputStream.newInstance(
+                        buffer, 0, read);
+                res = Response.parseFrom(is);
                 processResponse(res);
 
-            } catch (InvalidProtocolBufferException e)
+            } catch (IOException e)
             {
                 log.error("Failed to process Response message.", e);
             } catch (ZMQException e)
@@ -79,7 +87,7 @@ public class WorkerCtrlIn implements Worker
 
             // Do something with response
         }
-        cchan_in.close();
+        _cchan_in.close();
     }
 
     private void processResponse(Response res)

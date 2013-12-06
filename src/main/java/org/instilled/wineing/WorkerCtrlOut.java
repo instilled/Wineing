@@ -21,6 +21,8 @@ public class WorkerCtrlOut implements Worker
 
     private volatile boolean _running;
 
+    private ZMQChannel _ctrl_out;
+
     public WorkerCtrlOut(String cchanOut)
     {
         _cchanOut = cchanOut;
@@ -30,6 +32,7 @@ public class WorkerCtrlOut implements Worker
     public void shutdown()
     {
         _running = false;
+        _ctrl_out.close();
     }
 
     public void addRequest(Request r)
@@ -42,9 +45,9 @@ public class WorkerCtrlOut implements Worker
     {
         _running = true;
 
-        ZMQChannel ctrl_out = new ZMQChannel(_cchanOut,
+        _ctrl_out = new ZMQChannel(_cchanOut,
                 ZMQChannelType.PUSH_CONNECT);
-        ctrl_out.bind();
+        _ctrl_out.bind();
 
         while (_running)
         {
@@ -61,7 +64,7 @@ public class WorkerCtrlOut implements Worker
                 }
 
                 byte[] buffer = request.toByteArray();
-                ctrl_out.send(buffer);
+                _ctrl_out.send(buffer);
 
                 // If shutdown was requested we exit the thread...
                 // No more processing is done
@@ -76,6 +79,6 @@ public class WorkerCtrlOut implements Worker
             }
         }
 
-        ctrl_out.close();
+        _ctrl_out.close();
     }
 }

@@ -14,7 +14,6 @@ import org.apache.commons.cli.PosixParser;
 import org.instilled.wineing.core.ResponseProcessor;
 import org.instilled.wineing.core.WineingRemoteAPI;
 import org.instilled.wineing.core.Worker;
-import org.instilled.wineing.core.ZMQChannel;
 import org.instilled.wineing.gen.WineingCtrlProto.Request;
 import org.instilled.wineing.gen.WineingCtrlProto.Request.Builder;
 import org.instilled.wineing.gen.WineingCtrlProto.Request.Type;
@@ -133,15 +132,16 @@ public class WineingExampleClient
                 }
             });
 
-            // Wait a few seconds before shutting down the application
+            // Wait a few seconds before shutting down the
+            // application
             try
             {
                 Thread.sleep(1000);
             } catch (InterruptedException e)
             {
             }
-
             client.shutdown();
+
         }
     }
 
@@ -185,9 +185,9 @@ public class WineingExampleClient
         }
 
         // We could use Thread.interrupt() method if ZMQ would not use
-        // non-interruptible (non-native) channels. We thus
+        // non-interruptible (native) channels. We thus
         // close/destroy the context which nearly does the same.
-        ZMQChannel.destroy();
+        //ZMQChannel.destroy();
     }
 
     public WineingRemoteAPI api()

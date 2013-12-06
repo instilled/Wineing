@@ -21,12 +21,17 @@
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 
+// Used to send control and market data messages to the client
+// Not thread safe. The thread invoking 
+static chan *g_cchan_out;
+static chan *g_mchan;
+
 /**
  * Prcesses each market data update from NxCore sends it through a ZMQ
  * channel to the client. The
  */
-int STDCALL my_processTapeFn(const NxCoreSystem *pNxCoreSys,
-                             const NxCoreMessage *pNxCoreMsg)
+int STDCALL nxtape_process(const NxCoreSystem *pNxCoreSys,
+                           const NxCoreMessage *pNxCoreMsg)
 {
   using namespace WineingMarketDataProto;
 
@@ -62,7 +67,7 @@ int STDCALL my_processTapeFn(const NxCoreSystem *pNxCoreSys,
       buffer = new char[buf_size];
       google::protobuf::io::ArrayOutputStream os (buffer, buf_size);
       m.SerializeToZeroCopyStream(&os);
-      chan_send(g_market_thread_mchan, buffer, m.ByteSize());
+      chan_send(g_mchan, buffer, m.ByteSize());
       break;
 
     // case NxMSG_EXGQUOTE:
@@ -92,4 +97,11 @@ int STDCALL my_processTapeFn(const NxCoreSystem *pNxCoreSys,
 
   return t_data.cmd < WINEING_CTRL_CMD_MARKET_RUN ?
     NxCALLBACKRETURN_STOP : NxCALLBACKRETURN_CONTINUE;
+}
+
+void nxtape_init(chan *cchan_out, chan *mchan)
+{
+  g_cchan_out = cchan_out;
+  g_mchan = mchan;
+
 }

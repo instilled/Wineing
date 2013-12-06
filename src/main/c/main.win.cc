@@ -27,6 +27,15 @@ int main(int argc, char** argv)
 
   log(LOG_INFO, "Starting Wineing");
 
+  log(LOG_INFO,
+      "Configuration is [cchan_in: %s, cchan_out: %s, mchan: %s, tape-basedir: %s]",
+      conf.cchan_in_fqcn,
+      conf.cchan_out_fqcn,
+      conf.mchan_fqcn,
+      conf.tape_basedir
+      );
+
+
   // Be nice and let Linux users know that we are running a windows
   // application! HAHAHAHA!
   //MessageBox(NULL, "I'm Wineing!", "", MB_OK);

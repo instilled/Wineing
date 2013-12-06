@@ -1,5 +1,7 @@
 package org.instilled.wineing;
 
+import java.io.IOException;
+
 import org.instilled.wineing.core.Worker;
 import org.instilled.wineing.core.ZMQChannel;
 import org.instilled.wineing.core.ZMQChannel.ZMQChannelType;
@@ -8,7 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.zeromq.ZMQException;
 
-import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.CodedInputStream;
 
 public class WorkerMarket implements Worker
 {
@@ -18,6 +20,8 @@ public class WorkerMarket implements Worker
     private String _mchan;
 
     volatile boolean _running;
+
+    private ZMQChannel _market;
 
     public WorkerMarket(String mchan)
     {
@@ -32,10 +36,12 @@ public class WorkerMarket implements Worker
     @Override
     public void run()
     {
+        byte[] buffer = new byte[1024];
+
         _running = true;
 
-        ZMQChannel market = new ZMQChannel(_mchan, ZMQChannelType.SUB);
-        market.bind();
+        _market = new ZMQChannel(_mchan, ZMQChannelType.SUB);
+        _market.bind();
 
         long count = 0;
         while (_running)
@@ -43,9 +49,10 @@ public class WorkerMarket implements Worker
 
             try
             {
-                byte[] buf = market.receive();
-
-                MarketData marketData = MarketData.parseFrom(buf);
+                int read = _market.receive(buffer, 0, buffer.length);
+                CodedInputStream is = CodedInputStream.newInstance(
+                        buffer, 0, read);
+                MarketData marketData = MarketData.parseFrom(is);
 
                 if (count % 1000 == 0)
                 {
@@ -55,7 +62,7 @@ public class WorkerMarket implements Worker
                 }
 
                 count++;
-            } catch (InvalidProtocolBufferException e)
+            } catch (IOException e)
             {
                 log.error("Failed to process MarketData message.", e);
             } catch (ZMQException e)
@@ -65,6 +72,6 @@ public class WorkerMarket implements Worker
         }
         log.debug("Received " + count + " messages");
 
-        market.close();
+        _market.close();
     }
 }

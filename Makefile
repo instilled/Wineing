@@ -277,8 +277,11 @@ release: dirs $(EXES) libs
 
 test: dirs $(TEST_EXES)
 
+perf:
+	@echo TODO: not yet implemented...
+
 todo:
-	@ack TODO **
+	@ack TODO */**
 
 run-tests: test
 	cd $(TESTBINDIR)

@@ -48,9 +48,6 @@ w_ctrl g_data = {
   new char[WINEING_CTRL_DEFAULT_DATA_SIZE],
   0
 };
-chan *g_market_thread_mchan;
-chan *g_market_thread_ichan_out;
-
 
 /**
  * Used to make the *market_thread* sleep if the user has either not
@@ -95,9 +92,9 @@ void wineing_run(w_ctx &ctx)
   pthread_create(&market_t, NULL, market_thread, (void*)&ctx);
 
   // Wait for threads to finish
+  pthread_join(market_t, NULL);
   pthread_join(cchan_out_t, NULL);
   pthread_join(cchan_in_t, NULL);
-  pthread_join(market_t, NULL);
 }
 
 void wineing_shutdown(w_ctx &ctx)
@@ -115,6 +112,8 @@ void wineing_shutdown(w_ctx &ctx)
   google::protobuf::ShutdownProtobufLibrary();
 
   lazy_destroy();
+
+  log(LOG_INFO, "Application shutdown successful.");
 }
 
 /**
@@ -157,7 +156,7 @@ void* cchan_in_thread(void *_ctx)
   using namespace WineingCtrlProto;
 
   w_ctx *ctx = (w_ctx *)_ctx;
-  chan *ichan_out;
+  chan *cchan_out_inmem;
   chan *cchan_in;
   char *buffer;
   // Statically allocate variables to improve runtime performance
@@ -183,8 +182,8 @@ void* cchan_in_thread(void *_ctx)
   }
 
   // We can not bind to the inproc channel unless it's been created.
-  ichan_out = chan_init(DEFAULTS_ICHAN_NAME, CHAN_TYPE_PUSH_CONNECT);
-  while(0 > chan_bind(ichan_out)) {
+  cchan_out_inmem = chan_init(DEFAULTS_ICHAN_NAME, CHAN_TYPE_PUSH_CONNECT);
+  while(0 > chan_bind(cchan_out_inmem)) {
     sleep(1);
   }
 
@@ -282,6 +281,13 @@ void* cchan_in_thread(void *_ctx)
                                                   &t_data,
                                                   &g_data,
                                                   _copy_local_to_shared);
+
+          // In case no START message was successfully processed by the
+          // control thread notifing the market thread is still necessary.
+          // Do that.
+          pthread_mutex_lock( &g_market_sync_mutex );
+          pthread_cond_signal( &g_market_sync_cond );
+          pthread_mutex_unlock( &g_market_sync_mutex );
           break;
         }
 
@@ -294,7 +300,7 @@ void* cchan_in_thread(void *_ctx)
       //    res.requestid(),
       //    res.type()
       //    );
-      if(0 > chan_send(ichan_out, buffer, buf_size, _send_free)) {
+      if(0 > chan_send(cchan_out_inmem, buffer, buf_size, _send_free)) {
         log(LOG_WARN,
             "Failed sending message to inproc channel (%s). Error %s",
             DEFAULTS_ICHAN_NAME,
@@ -304,7 +310,7 @@ void* cchan_in_thread(void *_ctx)
   }
 
   chan_destroy(cchan_in);
-  chan_destroy(ichan_out);
+  chan_destroy(cchan_out_inmem);
 
   log(LOG_INFO, "Shutting down control_in thread");
 
@@ -318,6 +324,10 @@ void* market_thread(void *_ctx)
 {
   w_ctx *ctx = (w_ctx *)_ctx;
 
+  static timespec timeout {
+    0,     // seconds
+    500000 // nanoseconds
+  };
   // Thread local version of the shared state
   static int t_version = DEFAULTS_SHARED_VERSION_READ_INIT;
   static w_ctrl t_data = {
@@ -326,11 +336,14 @@ void* market_thread(void *_ctx)
     0
   };
 
+  chan *mchan;
+  chan *cchan_out_inmem;
+
   log(LOG_INFO, "Initializing market data thread (%s)",
       ctx->conf->mchan_fqcn);
 
-  g_market_thread_mchan = chan_init(ctx->conf->mchan_fqcn, CHAN_TYPE_PUB);
-  if(0 > chan_bind(g_market_thread_mchan)) {
+  mchan = chan_init(ctx->conf->mchan_fqcn, CHAN_TYPE_PUB);
+  if(0 > chan_bind(mchan)) {
     log(LOG_ERROR, "Failed binding mchan (%s). Error [%s]",
         ctx->conf->mchan_fqcn,
         chan_error());
@@ -338,23 +351,19 @@ void* market_thread(void *_ctx)
   }
 
   // We can not bind to the inproc channel unless it's been created.
-  g_market_thread_ichan_out =
-    chan_init(DEFAULTS_ICHAN_NAME, CHAN_TYPE_PUSH_CONNECT);
-  while(0 > chan_bind(g_market_thread_ichan_out)) {
+  cchan_out_inmem = chan_init(DEFAULTS_ICHAN_NAME, CHAN_TYPE_PUSH_CONNECT);
+  while(0 > chan_bind(cchan_out_inmem)) {
     sleep(1);
   }
 
-  while(1) {
-    // If WINEING_CTRL_CMD_MARKET_STOP was requested we block until
-    // START is requested. The *cchan_in* thread will notify us.
-    pthread_mutex_lock( &g_market_sync_mutex );
-    pthread_cond_wait( &g_market_sync_cond, &g_market_sync_mutex );
-    pthread_mutex_unlock( &g_market_sync_mutex );
+  nxtape_init(cchan_out_inmem, mchan);
 
+  while(1) {
     // NxCore callback will return upon successfully completing a tape
     // (day) but is ready to start again immediately thus the inner
     // while loop. Again the read on g_msg.ctrl is unsynchronized.
     while(1) {
+      // Read the global state
       t_version = lazy_update_local_if_changed(t_version,
                                                &t_data,
                                                &g_data,
@@ -369,14 +378,19 @@ void* market_thread(void *_ctx)
       } else if(t_data.cmd == WINEING_CTRL_CMD_MARKET_RUN) {
         log(LOG_DEBUG, "Running nxcore [tape: %s]",
             t_data.size == 0 ? "real-time" : t_data.data);
-        wininf_nxcore_run(t_data.data, my_processTapeFn);
+        wininf_nxcore_run(t_data.data, nxtape_process);
+      } else {
+        // Be nice to the cpu and sleep for a bit if no data was
+        // requested.
+        nanosleep(&timeout, 0);
       }
     }
   }
 
+  // Do a proper shutdown freeing all resources.
  shutdown:
-  chan_destroy(g_market_thread_mchan);
-  chan_destroy(g_market_thread_ichan_out);
+  chan_destroy(mchan);
+  chan_destroy(cchan_out_inmem);
   return NULL;
 }
 
@@ -430,21 +444,22 @@ void* cchan_out_thread(void *_ctx)
   }
 
   while(1) {
-    // Check whether shutdown was requested.
+    // Read the global state
     t_version = lazy_update_local_if_changed(t_version,
                                              &t_data,
                                              &g_data,
                                              _copy_shared_to_local);
 
-    if(t_data.cmd == WINEING_CTRL_CMD_SHUTDOWN) {
+    if(WINEING_CTRL_CMD_SHUTDOWN == t_data.cmd) {
       break;
     }
 
-    // Allocate buffer and receive the data. The buffer is freed in
-    // _cchan_out_send_free (invoked by chan_send as soon as the data
-    // is on the wire.
-    //log(LOG_WARN, "TODO: CCHAN_OUT in-mem channel buffer size is 1024.");
+    // Allocate buffer for the data we're expecting. It is freed by as
+    // soon as the data is on the wire by _send_free function provided
+    // to chan_send below.
     buffer = new char[1024];
+
+    // Receive the data
     read = chan_recv(cchan_in_mem,
                      _cchan_in_mem_copy,
                      buffer);
@@ -456,7 +471,7 @@ void* cchan_out_thread(void *_ctx)
       continue;
     }
 
-    // Send the data
+    // Send the data and free the buffer.
     read = chan_send(cchan_out,
                       buffer,
                       read,
@@ -467,6 +482,7 @@ void* cchan_out_thread(void *_ctx)
     }
   }
 
+  // Free all resources
   chan_destroy(cchan_in_mem);
   chan_destroy(cchan_out);
   log(LOG_INFO, "Shutting down control_out thread");

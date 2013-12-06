@@ -8,12 +8,16 @@
 
 #include "nx/nxtape.h"
 
-/**
- * Does nothing
- */
-int STDCALL my_processTapeFn(const NxCoreSystem *pNxCoreSys,
-                             const NxCoreMessage *pNxCoreMsg)
+#include "net/chan.h"
+
+int STDCALL nxtape_process(const NxCoreSystem *pNxCoreSys,
+                           const NxCoreMessage *pNxCoreMsg)
 {
+  // do nothing
   return 0;
 }
 
+void nxtape_init(chan *cchan_out, chan *mchan)
+{
+  // do nothing
+}

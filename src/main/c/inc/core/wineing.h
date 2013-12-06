@@ -17,9 +17,10 @@
 #define DEFAULTS_CCHAN_BUFFER_SIZE        2048
 
 // Values for w_ctrl.cmd
-#define WINEING_CTRL_CMD_INIT             3
-#define WINEING_CTRL_CMD_MARKET_RUN       2
-#define WINEING_CTRL_CMD_MARKET_STOP      1
+#define WINEING_CTRL_CMD_INIT             4
+#define WINEING_CTRL_CMD_MARKET_RUN       3
+#define WINEING_CTRL_CMD_MARKET_STOP      2
+#define WINEING_CTRL_CMD_MARKET_INIT      1
 #define WINEING_CTRL_CMD_SHUTDOWN         0
 #define WINEING_CTRL_DEFAULT_DATA_SIZE    1024
 
@@ -73,12 +74,6 @@ typedef struct
  * There's loads of details on the topic in lazy.h
  */
 extern w_ctrl g_data;
-
-/**
- * Shared among wineing.win.cc and tape_processor.cc below.
- */
-extern chan *g_market_thread_mchan;
-extern chan *g_market_thread_ichan_out;
 
 /**
  * Initializes Wineing.
