@@ -14,10 +14,10 @@
 		<protoc-files.2>src/main/resources/protobuf/WineingMarketDataProto.proto</protoc-files.2>
 
 		<zmq-version>2.2.0</zmq-version>
-		<protoc-version>2.4.1</protoc-version>
+		<protoc-version>3.16.1</protoc-version>
 		<slf4j-version>1.6.4</slf4j-version>
-		<logback-version>1.0.2</logback-version>
-		<junit-version>4.10</junit-version>
+		<logback-version>1.2.0</logback-version>
+		<junit-version>4.13.1</junit-version>
 
 		<source-version>1.6</source-version>
 		<target-version>1.6</target-version>

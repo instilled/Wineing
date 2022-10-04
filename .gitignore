@@ -1,3 +1,59 @@
+h2*
+*.sw*
+*~
+TAGS
+bin
+dist
+deploy
+target
+
+*.jar
+*.zip
+*.tar.gz
+build.info
+
+# Ignores for EA
+*.log
+*.ldb
+
+# Ignores for git
+*.orig
+*.patch
+
+# Ignores for IntelliJ
+*.iml
+!tooling/idea/**/*.iml
+*.ipr
+*.iws
+.idea/
+
+# Ignores for OS X
 .DS_Store
-\#*
-*.o
+._*
+.Spotlight-V100
+.Trashes
+
+# Ignores for Windows
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Ignores for gradle
+.gradle
+!gradle/wrapper/*
+
+logs
+build/
+dist/
+code/turn.platform.execution-blockchain/src/**/gen/
+out/
+dataSources/
+.ideaDataSources/
+
+.~lock.*
+.venv
+__pycache__
+node_modules/
+
+.config-dev/*
+!.config-dev/*.template

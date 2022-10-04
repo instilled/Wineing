@@ -62,16 +62,16 @@ instructions below should also apply to other *nix systems though.
 ### Getting the dependencies
 
 Most dependencies can be installed through the distribution's package
-manager. In fact it is the recommended approach but for
-zeromq. Instead it is suggested to compile zeromq manually and link
-Wineing against the binary. It is the recommented approach because the
+manager. In fact, it is the recommended approach but for
+zeromq. Instead, it is suggested to compile zeromq manually and link
+Wineing against the binary. It is the recommended approach because the
 user is in control of the ZMQ version in use, especially when running
-wineing and client on different archs.
+Wineing and client on different archs.
 
     $ yaourt -S protobuf
     $ yaourt -S wine
 
-Wineing is currently built aginst zeromq 2.2.0. To build zmq type
+Wineing is currently built against zeromq 2.2.0. To build zmq type
 
     $ wget http://download.zeromq.org/zeromq-2.2.0.tar.gz
     $ tar zxvf zeromq-2.2.0.tar.gz
